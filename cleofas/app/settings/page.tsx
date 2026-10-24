@@ -1,0 +1,54 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { BlockButton } from "@/components/BlockButton";
+import { ProfileForm } from "@/components/ProfileForm";
+import { requireOnboarded } from "@/lib/auth";
+
+export const metadata: Metadata = { title: "Settings" };
+
+export default async function SettingsPage() {
+  const { supabase, user, profile } = await requireOnboarded();
+
+  // Only your own blocks are readable (RLS), so this list is private.
+  const { data } = await supabase
+    .from("blocks")
+    .select("blocked_id, blocked:profiles!blocks_blocked_id_fkey(username)")
+    .eq("blocker_id", user.id)
+    .order("created_at", { ascending: false });
+
+  const blocked = ((data ?? []) as unknown as { blocked_id: string; blocked: { username: string } | null }[]).filter(
+    (row) => row.blocked,
+  );
+
+  return (
+    <div className="space-y-8">
+      <section className="space-y-3">
+        <h1 className="text-xl font-bold">Settings</h1>
+        <ProfileForm mode="settings" profile={profile} />
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">Blocked users</h2>
+        {blocked.length === 0 ? (
+          <p className="text-sm text-muted">You haven&apos;t blocked anyone.</p>
+        ) : (
+          <ul className="space-y-2">
+            {blocked.map((row) => (
+              <li key={row.blocked_id} className="card flex items-center justify-between">
+                <span>@{row.blocked!.username}</span>
+                <BlockButton userId={row.blocked_id} username={row.blocked!.username} isBlocked />
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <p className="text-sm text-muted">
+        Need to talk to someone?{" "}
+        <Link href="/help" className="text-accent underline">
+          Crisis resources
+        </Link>
+      </p>
+    </div>
+  );
+}
