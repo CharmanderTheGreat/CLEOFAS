@@ -276,16 +276,16 @@ Notes:
 
 | Scenario | Expected |
 |---|---|
-| A posts public, B does not follow A | B can see and reply |
-| A posts mutuals, B follows A only (not mutual) | B cannot see |
-| A posts mutuals, A and B are mutual | B can see and reply |
-| A blocks B, A posts public | B cannot see |
-| B blocks A | A cannot see B's posts or reply to them |
-| B replies to A's post, A deletes the reply | Success |
-| C tries to delete B's reply | Denied |
+| User A posts public, User B does not follow User A | User B can see and reply |
+| User A posts mutuals, User B follows User A only (not mutual) | User B cannot see |
+| User A posts mutuals, User A and User B are mutual | User B can see and reply |
+| User A blocks User B, User A posts public | User B cannot see |
+| User B blocks User A | User A cannot see User B's posts or reply to them |
+| User B replies to User A's post, User A deletes the reply | Success |
+| User C tries to delete User B's reply | Denied |
 | Unauthenticated visitor | No access |
-| B replies anonymously, A blocks B, then unblocks | A sees the same anonymous reply every time, never the author |
-| B replies with his name, A blocks B | A no longer sees that reply. Reply counts match |
+| User B replies anonymously, User A blocks User B, then unblocks | User A sees the same anonymous reply every time, never the author |
+| User B replies with his name, User A blocks User B | User A no longer sees that reply. Reply counts match |
 | Reporter reads own report | Cannot read target_author_id or target_body |
 | Reported reply is deleted | The report keeps the text and the author id |
 | Another user reads profile_private | Sees only their own row |
