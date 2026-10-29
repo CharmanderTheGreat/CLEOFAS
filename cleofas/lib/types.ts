@@ -5,8 +5,12 @@ export type Profile = {
   username: string;
   display_name: string | null;
   bio: string | null;
-  default_anonymous_replies: boolean;
   created_at: string;
+};
+
+// The signed-in user: public profile + their private settings (profile_private, own row only).
+export type Viewer = Profile & {
+  default_anonymous_replies: boolean;
 };
 
 export type PostRow = {
@@ -17,6 +21,7 @@ export type PostRow = {
   created_at: string;
   updated_at: string;
   author: { username: string; display_name: string | null } | null;
+  reply_count?: number;
 };
 
 // Shape returned by the get_replies() database function.

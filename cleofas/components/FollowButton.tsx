@@ -1,12 +1,14 @@
 import { followUser, unfollowUser } from "@/app/actions";
+import { ActionForm } from "./ActionForm";
 
 export function FollowButton({ userId, isFollowing }: { userId: string; isFollowing: boolean }) {
   return (
-    <form action={isFollowing ? unfollowUser : followUser}>
-      <input type="hidden" name="userId" value={userId} />
-      <button type="submit" className={isFollowing ? "btn-ghost" : "btn-primary"}>
-        {isFollowing ? "Following" : "Follow"}
-      </button>
-    </form>
+    <ActionForm
+      action={isFollowing ? unfollowUser : followUser}
+      fields={{ userId }}
+      className={isFollowing ? "btn-ghost" : "btn-primary"}
+    >
+      {isFollowing ? "Following" : "Follow"}
+    </ActionForm>
   );
 }

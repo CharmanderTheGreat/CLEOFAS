@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { GoogleSignInButton } from "@/components/GoogleSignInButton";
+import { MIN_AGE } from "@/lib/constants";
 
 export const metadata: Metadata = { title: "Sign in" };
 
@@ -18,6 +19,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         <p className="text-xs text-muted">
           We only use your Google account to sign you in. Your name and photo are never shown on Cleofas.
         </p>
+        <p className="text-xs text-muted">By continuing, you confirm that you are at least {MIN_AGE} years old.</p>
       </div>
 
       {error && (

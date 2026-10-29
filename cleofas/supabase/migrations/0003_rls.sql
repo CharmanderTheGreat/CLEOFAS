@@ -1,4 +1,4 @@
--- Cleofas: Row Level Security + least-privilege grants (PROJECT.md section 6)
+-- Cleofas: Row Level Security + least-privilege grants (README.md section 6)
 -- Privacy is enforced here, in the database. The frontend is not trusted.
 
 alter table public.profiles enable row level security;

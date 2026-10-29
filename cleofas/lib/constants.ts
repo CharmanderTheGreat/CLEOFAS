@@ -5,10 +5,16 @@ export const MAX_DISPLAY_NAME_LENGTH = 50;
 export const MAX_REPORT_REASON_LENGTH = 500;
 export const FEED_PAGE_SIZE = 20;
 
-// Age gate shown at onboarding (PROJECT.md section 11). Change to 18 if you want the stricter option.
+// Minimum age shown as a notice on the login page (README.md section 11). Not verified or stored.
 export const MIN_AGE = 13;
 
 export const USERNAME_REGEX = /^[a-z0-9_]{3,20}$/;
+export const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Kept in sync with profiles_username_reserved in supabase/migrations/0004_hardening.sql.
+export const RESERVED_USERNAMES = [
+  "admin", "administrator", "mod", "moderator", "support", "staff", "cleofas",
+  "official", "system", "root", "help", "anonymous", "deleted",
+] as const;
 // Profiles created by the database trigger get a temporary name like user_1a2b3c4d.
 export const TEMP_USERNAME_REGEX = /^user_[0-9a-f]{8}$/;
 

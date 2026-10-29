@@ -1,4 +1,4 @@
--- Cleofas: tables and indexes (PROJECT.md section 5)
+-- Cleofas: tables and indexes (README.md section 5)
 -- Run order: 0001_schema -> 0002_functions -> 0003_rls
 
 -- profiles ---------------------------------------------------------------

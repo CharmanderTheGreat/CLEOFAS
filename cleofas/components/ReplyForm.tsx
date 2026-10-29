@@ -2,9 +2,17 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { createReply } from "@/app/actions";
-import { MAX_REPLY_LENGTH } from "@/lib/constants";
+import { MAX_REPLY_LENGTH, type Visibility } from "@/lib/constants";
 
-export function ReplyForm({ postId, defaultAnonymous }: { postId: string; defaultAnonymous: boolean }) {
+export function ReplyForm({
+  postId,
+  defaultAnonymous,
+  visibility,
+}: {
+  postId: string;
+  defaultAnonymous: boolean;
+  visibility: Visibility;
+}) {
   const [state, action, pending] = useActionState(createReply, undefined);
   const [length, setLength] = useState(0);
   const formRef = useRef<HTMLFormElement>(null);
@@ -48,8 +56,14 @@ export function ReplyForm({ postId, defaultAnonymous }: { postId: string; defaul
       </div>
       <p className="text-xs text-muted">
         Anonymous replies hide your username from everyone, including the post author. Moderators can still see who
-        wrote them.
+        wrote them. Blocking someone never reveals or removes an anonymous reply.
       </p>
+      {visibility === "mutuals" && (
+        <p className="text-xs text-muted">
+          Heads up: only the author&apos;s mutuals can reply to this post, so the group is small and an anonymous reply is
+          easier to guess from the wording, timing or topic.
+        </p>
+      )}
       {state?.error && (
         <p role="alert" className="text-sm text-red-700">
           {state.error}

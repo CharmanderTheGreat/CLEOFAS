@@ -1,22 +1,22 @@
 import { blockUser, unblockUser } from "@/app/actions";
-import { ConfirmButton } from "./ConfirmButton";
+import { ActionForm } from "./ActionForm";
 
 export function BlockButton({ userId, username, isBlocked }: { userId: string; username: string; isBlocked: boolean }) {
+  if (isBlocked) {
+    return (
+      <ActionForm action={unblockUser} fields={{ userId }} className="btn-ghost">
+        Unblock
+      </ActionForm>
+    );
+  }
   return (
-    <form action={isBlocked ? unblockUser : blockUser}>
-      <input type="hidden" name="userId" value={userId} />
-      {isBlocked ? (
-        <button type="submit" className="btn-ghost">
-          Unblock
-        </button>
-      ) : (
-        <ConfirmButton
-          className="btn-danger"
-          message={`Block @${username}? You won't see each other's posts or replies, and any follows between you will be removed.`}
-        >
-          Block
-        </ConfirmButton>
-      )}
-    </form>
+    <ActionForm
+      action={blockUser}
+      fields={{ userId }}
+      className="btn-danger"
+      confirm={`Block @${username}? You won't see each other's posts or non-anonymous replies, and any follows between you will be removed.`}
+    >
+      Block
+    </ActionForm>
   );
 }

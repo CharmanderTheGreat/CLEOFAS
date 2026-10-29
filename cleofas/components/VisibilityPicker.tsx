@@ -4,7 +4,7 @@ import type { Visibility } from "@/lib/constants";
 export function VisibilityPicker({ name = "visibility", defaultValue = "public" }: { name?: string; defaultValue?: Visibility }) {
   const options: { value: Visibility; label: string; hint: string }[] = [
     { value: "public", label: "Public", hint: "Any signed-in user can see and reply" },
-    { value: "mutuals", label: "Mutuals", hint: "Only people you follow who follow you back" },
+    { value: "mutuals", label: "Mutuals", hint: "Only mutuals. Small group, so anonymous replies are easier to guess" },
   ];
 
   return (

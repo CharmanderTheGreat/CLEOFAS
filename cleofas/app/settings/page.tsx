@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { BlockButton } from "@/components/BlockButton";
+import { DeleteAccountForm } from "@/components/DeleteAccountForm";
 import { ProfileForm } from "@/components/ProfileForm";
 import { requireOnboarded } from "@/lib/auth";
 
@@ -10,11 +11,13 @@ export default async function SettingsPage() {
   const { supabase, user, profile } = await requireOnboarded();
 
   // Only your own blocks are readable (RLS), so this list is private.
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("blocks")
     .select("blocked_id, blocked:profiles!blocks_blocked_id_fkey(username)")
     .eq("blocker_id", user.id)
     .order("created_at", { ascending: false });
+
+  if (error) throw new Error("Could not load settings.");
 
   const blocked = ((data ?? []) as unknown as { blocked_id: string; blocked: { username: string } | null }[]).filter(
     (row) => row.blocked,
@@ -41,6 +44,11 @@ export default async function SettingsPage() {
             ))}
           </ul>
         )}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">Danger zone</h2>
+        <DeleteAccountForm />
       </section>
 
       <p className="text-sm text-muted">

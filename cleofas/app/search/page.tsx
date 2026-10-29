@@ -6,29 +6,17 @@ export const metadata: Metadata = { title: "Find people" };
 
 export default async function SearchPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const { q = "" } = await searchParams;
-  const { supabase, user } = await requireOnboarded();
+  const { supabase } = await requireOnboarded();
 
   // Usernames only contain [a-z0-9_]; stripping everything else also neutralises LIKE wildcards.
   const term = q.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 20);
 
+  // One query: prefix match, without yourself and without anyone blocked in either direction.
   let people: { id: string; username: string; display_name: string | null }[] = [];
   if (term.length >= 2) {
-    const { data } = await supabase
-      .from("profiles")
-      .select("id, username, display_name")
-      .ilike("username", `${term.replace(/_/g, "\\_")}%`)
-      .neq("id", user.id)
-      .limit(20);
-
-    // Hide people who blocked you / whom you blocked.
-    const rows = data ?? [];
-    const blockedFlags = await Promise.all(
-      rows.map(async (row) => {
-        const { data: blocked } = await supabase.rpc("is_blocked", { a: user.id, b: row.id });
-        return Boolean(blocked);
-      }),
-    );
-    people = rows.filter((_, index) => !blockedFlags[index]);
+    const { data, error } = await supabase.rpc("search_profiles", { p_term: term });
+    if (error) throw new Error("Search failed.");
+    people = data ?? [];
   }
 
   return (

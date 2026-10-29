@@ -2,11 +2,11 @@
 
 import { useActionState } from "react";
 import { completeOnboarding, updateSettings } from "@/app/actions";
-import { MAX_BIO_LENGTH, MAX_DISPLAY_NAME_LENGTH, MIN_AGE } from "@/lib/constants";
-import type { Profile } from "@/lib/types";
+import { MAX_BIO_LENGTH, MAX_DISPLAY_NAME_LENGTH, TEMP_USERNAME_REGEX } from "@/lib/constants";
+import type { Viewer } from "@/lib/types";
 
 // One form for both first-time setup (onboarding) and the settings page.
-export function ProfileForm({ mode, profile }: { mode: "onboarding" | "settings"; profile: Profile }) {
+export function ProfileForm({ mode, profile }: { mode: "onboarding" | "settings"; profile: Viewer }) {
   const [state, action, pending] = useActionState(mode === "onboarding" ? completeOnboarding : updateSettings, undefined);
   const isOnboarding = mode === "onboarding";
 
@@ -17,7 +17,7 @@ export function ProfileForm({ mode, profile }: { mode: "onboarding" | "settings"
         <input
           id="username"
           name="username"
-          defaultValue={isOnboarding ? "" : profile.username}
+          defaultValue={TEMP_USERNAME_REGEX.test(profile.username) ? "" : profile.username}
           required
           minLength={3}
           maxLength={20}
@@ -56,12 +56,6 @@ export function ProfileForm({ mode, profile }: { mode: "onboarding" | "settings"
         </label>
       )}
 
-      {isOnboarding && (
-        <label className="flex items-start gap-2 text-sm">
-          <input type="checkbox" name="ageConfirmed" required className="mt-1" />
-          <span>I confirm that I am at least {MIN_AGE} years old.</span>
-        </label>
-      )}
 
       <button type="submit" className="btn-primary" disabled={pending}>
         {pending ? "Saving…" : isOnboarding ? "Continue" : "Save changes"}

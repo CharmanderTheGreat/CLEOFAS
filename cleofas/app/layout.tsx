@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import { signOut } from "./actions";
-import { createClient } from "@/lib/supabase/server";
+import { getViewer, isOnboarded } from "@/lib/auth";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -16,16 +16,9 @@ export const viewport: Viewport = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  let username: string | null = null;
-  if (user) {
-    const { data } = await supabase.from("profiles").select("username").eq("id", user.id).maybeSingle();
-    username = data?.username ?? null;
-  }
+  // Shared with the page through React cache(): no extra auth or profile query.
+  const viewer = await getViewer();
+  const showNav = viewer !== null && isOnboarded(viewer);
 
   return (
     <html lang="en">
@@ -35,12 +28,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <Link href="/" className="text-lg font-bold tracking-tight text-accent">
               Cleofas
             </Link>
-            {user && (
+            {viewer && (
               <>
-                <Link href="/" className="link-quiet">Home</Link>
-                <Link href="/search" className="link-quiet">Find people</Link>
-                {username && <Link href={`/u/${username}`} className="link-quiet">Profile</Link>}
-                <Link href="/settings" className="link-quiet">Settings</Link>
+                {showNav && (
+                  <>
+                    <Link href="/" className="link-quiet">Home</Link>
+                    <Link href="/search" className="link-quiet">Find people</Link>
+                    <Link href={`/u/${viewer.username}`} className="link-quiet">Profile</Link>
+                    <Link href="/settings" className="link-quiet">Settings</Link>
+                  </>
+                )}
                 <form action={signOut} className="ml-auto">
                   <button type="submit" className="link-quiet">Sign out</button>
                 </form>

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { deleteReply } from "@/app/actions";
 import { fullDate, timeAgo } from "@/lib/format";
 import type { ReplyRow } from "@/lib/types";
-import { ConfirmButton } from "./ConfirmButton";
+import { ActionForm } from "./ActionForm";
 import { EditReplyForm } from "./EditForms";
 import { ReportDialog } from "./ReportDialog";
 
@@ -34,13 +34,15 @@ export function ReplyList({ replies, postId }: { replies: ReplyRow[]; postId: st
           <footer className="flex flex-wrap items-start gap-x-4 gap-y-2 text-sm">
             {reply.is_mine && <EditReplyForm id={reply.id} postId={postId} body={reply.body} />}
             {reply.can_delete && (
-              <form action={deleteReply}>
-                <input type="hidden" name="id" value={reply.id} />
-                <input type="hidden" name="postId" value={postId} />
-                <ConfirmButton className="link-quiet" message="Delete this reply?">
-                  Delete
-                </ConfirmButton>
-              </form>
+              <ActionForm
+                action={deleteReply}
+                fields={{ id: reply.id, postId }}
+                className="link-quiet"
+                pendingLabel="Deleting…"
+                confirm="Delete this reply?"
+              >
+                Delete
+              </ActionForm>
             )}
             {!reply.is_mine && <ReportDialog replyId={reply.id} />}
           </footer>

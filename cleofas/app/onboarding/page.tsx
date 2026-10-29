@@ -1,15 +1,14 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { ProfileForm } from "@/components/ProfileForm";
-import { requireProfile } from "@/lib/auth";
-import { TEMP_USERNAME_REGEX } from "@/lib/constants";
+import { isOnboarded, requireProfile } from "@/lib/auth";
 
 export const metadata: Metadata = { title: "Welcome" };
 
 export default async function OnboardingPage() {
   const { profile } = await requireProfile();
-  // Already set up? Skip straight to the feed.
-  if (!TEMP_USERNAME_REGEX.test(profile.username)) redirect("/");
+  // Already set up (username)? Skip straight to the feed.
+  if (isOnboarded(profile)) redirect("/");
 
   return (
     <div className="mx-auto max-w-md space-y-4">

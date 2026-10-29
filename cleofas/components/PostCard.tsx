@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { deletePost } from "@/app/actions";
+import { ActionForm } from "./ActionForm";
 import { fullDate, timeAgo } from "@/lib/format";
 import type { PostRow } from "@/lib/types";
-import { ConfirmButton } from "./ConfirmButton";
 import { EditPostForm } from "./EditForms";
 import { ReportDialog } from "./ReportDialog";
 
@@ -55,12 +55,15 @@ export function PostCard({ post, viewerId, replyCount = 0, detailed = false }: P
         {detailed && isMine && (
           <>
             <EditPostForm id={post.id} body={post.body} visibility={post.visibility} />
-            <form action={deletePost}>
-              <input type="hidden" name="id" value={post.id} />
-              <ConfirmButton className="link-quiet" message="Delete this post and all its replies?">
-                Delete
-              </ConfirmButton>
-            </form>
+            <ActionForm
+              action={deletePost}
+              fields={{ id: post.id }}
+              className="link-quiet"
+              pendingLabel="Deleting…"
+              confirm="Delete this post and all its replies?"
+            >
+              Delete
+            </ActionForm>
           </>
         )}
         {detailed && !isMine && <ReportDialog postId={post.id} />}

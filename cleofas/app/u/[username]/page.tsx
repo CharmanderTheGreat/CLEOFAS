@@ -4,8 +4,9 @@ import { BlockButton } from "@/components/BlockButton";
 import { FollowButton } from "@/components/FollowButton";
 import { PostCard } from "@/components/PostCard";
 import { requireOnboarded } from "@/lib/auth";
-import { FEED_PAGE_SIZE, USERNAME_REGEX } from "@/lib/constants";
-import type { PostRow, Profile } from "@/lib/types";
+import { USERNAME_REGEX } from "@/lib/constants";
+import { fetchPosts } from "@/lib/posts";
+import type { Profile } from "@/lib/types";
 
 export async function generateMetadata({ params }: { params: Promise<{ username: string }> }) {
   const { username } = await params;
@@ -25,7 +26,11 @@ export default async function ProfilePage({
 
   const { supabase, user } = await requireOnboarded();
 
-  const { data: found } = await supabase.from("profiles").select("*").eq("username", username).maybeSingle();
+  const { data: found } = await supabase
+    .from("profiles")
+    .select("id, username, display_name, bio, created_at")
+    .eq("username", username)
+    .maybeSingle();
   if (!found) notFound();
   const profile = found as Profile;
   const isMe = profile.id === user.id;
@@ -45,29 +50,8 @@ export default async function ProfilePage({
   const iFollow = Boolean(iFollowRes.data);
   const followsMe = Boolean(followsMeRes.data);
 
-  // RLS hides mutuals-only posts unless the viewer is a mutual (or the author).
-  let query = supabase
-    .from("posts")
-    .select(
-      "id, author_id, body, visibility, created_at, updated_at, author:profiles!posts_author_id_fkey(username, display_name)",
-    )
-    .eq("author_id", profile.id)
-    .order("created_at", { ascending: false })
-    .limit(FEED_PAGE_SIZE + 1);
-  if (before) query = query.lt("created_at", before);
-
-  const { data: postData } = await query;
-  const rows = (postData ?? []) as unknown as PostRow[];
-  const hasMore = rows.length > FEED_PAGE_SIZE;
-  const posts = rows.slice(0, FEED_PAGE_SIZE);
-
-  const counts = new Map<string, number>();
-  if (posts.length > 0) {
-    const { data: countRows } = await supabase.rpc("reply_counts", { p_post_ids: posts.map((p) => p.id) });
-    for (const row of (countRows ?? []) as { post_id: string; reply_count: number | string }[]) {
-      counts.set(row.post_id, Number(row.reply_count));
-    }
-  }
+  // Mutuals-only posts are hidden unless the viewer is a mutual (or the author). One call incl. reply counts.
+  const { posts, hasMore } = await fetchPosts(supabase, { authorId: profile.id, before });
 
   return (
     <div className="space-y-6">
@@ -112,7 +96,7 @@ export default async function ProfilePage({
       ) : (
         <div className="space-y-3">
           {posts.map((post) => (
-            <PostCard key={post.id} post={post} viewerId={user.id} replyCount={counts.get(post.id) ?? 0} />
+            <PostCard key={post.id} post={post} viewerId={user.id} replyCount={post.reply_count ?? 0} />
           ))}
         </div>
       )}

@@ -1,4 +1,4 @@
--- Cleofas: helper functions, RPCs and triggers (PROJECT.md sections 3, 5 and 6)
+-- Cleofas: helper functions, RPCs and triggers (README.md sections 3, 5 and 6)
 --
 -- All helpers run with elevated rights (security definer) so RLS policies can call
 -- them without recursion. Each one only answers questions about the *caller*
