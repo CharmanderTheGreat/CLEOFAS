@@ -1,13 +1,12 @@
 {
-  "name": "cleofas",
+  "name": "cleofas-frontend",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit",
-    "test:rls": "node --test tests/rls.test.mjs"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
@@ -17,7 +16,6 @@
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.5.11",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",

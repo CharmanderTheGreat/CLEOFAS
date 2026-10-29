@@ -1,0 +1,12 @@
+{
+  "name": "cleofas-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cleofas database: Supabase migrations (schema, functions, RLS) and the RLS test suite",
+  "scripts": {
+    "test": "node --test tests/rls.test.mjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.11"
+  }
+}
