@@ -24,18 +24,32 @@ export const getViewer = cache(async (): Promise<Viewer | null> => {
   const supabase = await getSupabase();
   const { data } = await supabase
     .from("profiles")
-    .select("id, username, display_name, bio, created_at, private:profile_private(default_anonymous_replies)")
+    .select("id, username, display_name, bio, created_at, private:profile_private(default_anonymous_replies, muted_words)")
     .eq("id", id)
     .maybeSingle();
   if (!data) return null;
 
-  const { private: priv, ...profile } = data as unknown as Omit<Viewer, "default_anonymous_replies"> & {
-    private: { default_anonymous_replies: boolean } | null;
+  const { private: priv, ...profile } = data as unknown as Omit<Viewer, "default_anonymous_replies" | "muted_words"> & {
+    private: { default_anonymous_replies: boolean; muted_words: string[] } | null;
   };
   return {
     ...profile,
     default_anonymous_replies: priv?.default_anonymous_replies ?? false,
+    muted_words: priv?.muted_words ?? [],
   };
+});
+
+// Unread notification count for the header badge (same visibility rules as the notifications page).
+export const getUnreadCount = cache(async (): Promise<number> => {
+  const supabase = await getSupabase();
+  const { data, error } = await supabase.rpc("unread_notification_count");
+  return error ? 0 : Number(data ?? 0);
+});
+
+export const getIsAdmin = cache(async (): Promise<boolean> => {
+  const supabase = await getSupabase();
+  const { data, error } = await supabase.rpc("is_admin");
+  return !error && data === true;
 });
 
 export function isOnboarded(viewer: Viewer): boolean {

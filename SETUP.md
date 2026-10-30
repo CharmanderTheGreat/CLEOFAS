@@ -16,7 +16,17 @@ Stack: Next.js 16 (App Router) + TypeScript + Tailwind CSS 4 + Supabase (Postgre
 - Rate limits (in the database, also on blocks), crisis resources page + links in footer and composer
 - All privacy rules live in Postgres RLS (`backend/supabase/migrations`), tested with `npm test` in `backend/`
 
-Not built yet (Phase 2+): realtime replies, notifications, PWA, admin moderation page, muted words, vent mode, reactions.
+Phase 2 (built): anonymous posts, reply notifications, live updates (Realtime), muted words, admin moderation page, infinite scroll, installable PWA, green theme with animated dark/light switch.
+
+Not built yet (Phase 3): vent mode, reactions, content warning toggle, email notifications.
+
+## Phase 2 notes
+- **Become a moderator:** sign in once, then in the Supabase SQL Editor run
+  `insert into public.admins (user_id) select id from public.profiles where username = 'your_username';`
+  A "Moderator tools" link then shows up in Settings.
+- **Live updates:** need Realtime enabled for the project (default). If replies or the notification badge do not update by themselves, the page still works, you just need to refresh.
+- **PWA / install:** works on the deployed HTTPS site (Vercel), not on plain `localhost` builds. The service worker only caches the offline page.
+- **Theme:** the light/dark switch is in the header. It remembers your choice and follows your device the first time.
 
 ## Setup
 
@@ -28,8 +38,9 @@ Not built yet (Phase 2+): realtime replies, notifications, PWA, admin moderation
    3. `backend/supabase/migrations/0003_rls.sql`
    4. `backend/supabase/migrations/0004_hardening.sql`
    5. `backend/supabase/migrations/0005_remove_age_gate.sql`
+   6. `backend/supabase/migrations/0006_phase2.sql`
 
-   Already ran 0001-0003? Run only 0004 then 0005.
+   Already ran some of them? Run only the missing ones, in order.
 
    (Or with the Supabase CLI: `supabase link` then `supabase db push`.)
 
@@ -67,7 +78,7 @@ In `backend/` (run `npm install` once first):
 
 | Command | What it does |
 |---|---|
-| `npm test` | Runs the README.md section 10 checklist (plus extra cases, 31 tests) against the migrations in an in-memory Postgres. No Supabase account needed. |
+| `npm test` | Runs the README.md section 10 checklist (plus extra cases, 45 tests) against the migrations in an in-memory Postgres. No Supabase account needed. |
 
 ## How privacy is enforced
 

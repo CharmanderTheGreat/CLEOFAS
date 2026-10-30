@@ -23,7 +23,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       </div>
 
       {error && (
-        <p role="alert" className="text-sm text-red-700">
+        <p role="alert" className="text-sm text-danger">
           {error === "profile"
             ? "We couldn't load your profile. Please sign in again."
             : "Sign-in failed. Please try again."}

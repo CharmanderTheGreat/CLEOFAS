@@ -1,20 +1,79 @@
 @import "tailwindcss";
 
-@theme {
-  --color-paper: #faf7f2;
-  --color-card: #ffffff;
-  --color-ink: #2a2522;
-  --color-muted: #7a716a;
-  --color-line: #e8e1d8;
-  --color-accent: #c2410c;
-  --color-accent-soft: #fdeee3;
+/* Dark mode is a class on <html> (set before first paint by the script in layout.tsx). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Theme tokens. Light = sage green on a soft mint paper. Dark = pastel green on deep green-black. */
+:root {
+  --paper: #f3f7f3;
+  --card: #ffffff;
+  --ink: #1d2b24;
+  --muted: #5b6d62;
+  --line: #d9e5dc;
+  --accent: #3f7a5a;
+  --accent-strong: #33664a;
+  --accent-soft: #e2efe6;
+  --on-accent: #ffffff;
+  --chip: #e8eee9;
+  --danger: #b42318;
+  --danger-soft: #fdecea;
+  color-scheme: light;
+}
+
+.dark {
+  --paper: #0e1612;
+  --card: #15211b;
+  --ink: #e5efe8;
+  --muted: #94a99b;
+  --line: #243428;
+  --accent: #8fcfa9;
+  --accent-strong: #a9dec0;
+  --accent-soft: #1c3026;
+  --on-accent: #0e1612;
+  --chip: #1d2b23;
+  --danger: #f1948a;
+  --danger-soft: #3a1f1c;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-card: var(--card);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+  --color-chip: var(--chip);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
 body {
-  background: var(--color-paper);
-  color: var(--color-ink);
+  background: var(--paper);
+  color: var(--ink);
   font-family: var(--font-sans);
+}
+
+/* Smooth color change while the theme toggles (class is removed again after 400 ms).
+   The toggle itself is excluded so its own sliding animation is not overridden. */
+.theme-anim *:not(.theme-toggle, .theme-toggle *),
+.theme-anim {
+  transition-property: background-color, border-color, color, fill, stroke, box-shadow;
+  transition-duration: 350ms;
+  transition-timing-function: ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-anim *,
+  .theme-anim,
+  .theme-toggle,
+  .theme-toggle * {
+    transition: none !important;
+  }
 }
 
 @utility btn {
@@ -24,13 +83,13 @@ body {
 
 @layer components {
   .btn-primary {
-    @apply btn bg-accent text-white hover:bg-orange-800;
+    @apply btn bg-accent text-on-accent hover:bg-accent-strong;
   }
   .btn-ghost {
     @apply btn border border-line bg-card text-ink hover:bg-accent-soft;
   }
   .btn-danger {
-    @apply btn border border-red-200 bg-card text-red-700 hover:bg-red-50;
+    @apply btn border border-danger/30 bg-card text-danger hover:bg-danger-soft;
   }
   .input {
     @apply w-full rounded-xl border border-line bg-card px-3 py-2 text-sm outline-none

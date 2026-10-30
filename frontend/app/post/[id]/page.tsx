@@ -1,11 +1,13 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { PostCard } from "@/components/PostCard";
+import { LiveRefresh } from "@/components/LiveRefresh";
 import { ReplyForm } from "@/components/ReplyForm";
 import { ReplyList } from "@/components/ReplyList";
 import { requireOnboarded } from "@/lib/auth";
 import { UUID_REGEX } from "@/lib/constants";
-import type { PostRow, ReplyRow } from "@/lib/types";
+import { toPostRow } from "@/lib/posts";
+import type { ReplyRow } from "@/lib/types";
 
 export const metadata = { title: "Post" };
 
@@ -13,24 +15,19 @@ export default async function PostPage({ params }: { params: Promise<{ id: strin
   const { id } = await params;
   if (!UUID_REGEX.test(id)) notFound();
 
-  const { supabase, user, profile } = await requireOnboarded();
+  const { supabase, profile } = await requireOnboarded();
 
-  // Post and replies are independent, so fetch them in parallel.
-  // RLS returns no post when it is hidden from this viewer (mutuals-only, blocked, age not confirmed...).
-  // Replies only come from get_replies() so anonymous replies never leak the author.
+  // Post and replies are independent, so fetch them in parallel. Both go through database functions:
+  // get_post() hides the author of anonymous posts, get_replies() hides anonymous repliers.
+  // No post comes back when it is hidden from this viewer (mutuals-only, blocked, ...).
   const [postRes, replyRes] = await Promise.all([
-    supabase
-      .from("posts")
-      .select(
-        "id, author_id, body, visibility, created_at, updated_at, author:profiles!posts_author_id_fkey(username, display_name)",
-      )
-      .eq("id", id)
-      .maybeSingle(),
+    supabase.rpc("get_post", { p_post_id: id }),
     supabase.rpc("get_replies", { p_post_id: id }),
   ]);
   if (postRes.error || replyRes.error) throw new Error("Could not load this post.");
-  if (!postRes.data) notFound();
-  const post = postRes.data as unknown as PostRow;
+  const row = ((postRes.data ?? []) as Parameters<typeof toPostRow>[0][])[0];
+  if (!row) notFound();
+  const post = toPostRow(row);
   const replies = (replyRes.data ?? []) as ReplyRow[];
 
   return (
@@ -39,7 +36,8 @@ export default async function PostPage({ params }: { params: Promise<{ id: strin
         ← Back
       </Link>
 
-      <PostCard post={post} viewerId={user.id} detailed />
+      <LiveRefresh topic={`post:${post.id}`} event="reply" />
+      <PostCard post={post} detailed />
 
       <section aria-label="Replies" className="space-y-3">
         <h2 className="text-sm font-semibold text-muted">
@@ -48,7 +46,11 @@ export default async function PostPage({ params }: { params: Promise<{ id: strin
         <ReplyList replies={replies} postId={post.id} />
       </section>
 
-      <ReplyForm postId={post.id} defaultAnonymous={profile.default_anonymous_replies} visibility={post.visibility} />
+      <ReplyForm
+        postId={post.id}
+        defaultAnonymous={profile.default_anonymous_replies}
+        visibility={post.visibility}
+      />
     </div>
   );
 }

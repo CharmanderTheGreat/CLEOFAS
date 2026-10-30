@@ -9,6 +9,7 @@ import { VisibilityPicker } from "./VisibilityPicker";
 export function PostComposer() {
   const [state, action, pending] = useActionState(createPost, undefined);
   const [length, setLength] = useState(0);
+  const [anonymous, setAnonymous] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
   // Clear the form after a successful post.
@@ -16,6 +17,7 @@ export function PostComposer() {
     if (state?.ok) {
       formRef.current?.reset();
       setLength(0);
+      setAnonymous(false);
     }
   }, [state]);
 
@@ -34,7 +36,32 @@ export function PostComposer() {
         className="input resize-none"
         onChange={(event) => setLength(event.target.value.length)}
       />
-      <VisibilityPicker />
+      {anonymous ? (
+        <>
+          <input type="hidden" name="visibility" value="public" />
+          <p className="text-xs text-muted">
+            Anonymous posts are public: any signed-in user can see and reply, and nobody can see who wrote it.
+            Moderators can still see the author if the post is reported.
+          </p>
+        </>
+      ) : (
+        <VisibilityPicker />
+      )}
+      <label className="flex items-start gap-2 text-sm">
+        <input
+          type="checkbox"
+          name="anonymous"
+          checked={anonymous}
+          onChange={(event) => setAnonymous(event.target.checked)}
+          className="mt-1"
+        />
+        <span>
+          Post anonymously
+          <span className="block text-xs text-muted">
+            Hidden from everyone, including on your profile. Blocking never reveals it.
+          </span>
+        </span>
+      </label>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-muted">
           Having a hard time?{" "}
@@ -52,7 +79,7 @@ export function PostComposer() {
         </div>
       </div>
       {state?.error && (
-        <p role="alert" className="text-sm text-red-700">
+        <p role="alert" className="text-sm text-danger">
           {state.error}
         </p>
       )}

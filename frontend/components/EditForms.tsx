@@ -5,7 +5,17 @@ import { updatePost, updateReply } from "@/app/actions";
 import { MAX_POST_LENGTH, MAX_REPLY_LENGTH, type Visibility } from "@/lib/constants";
 import { VisibilityPicker } from "./VisibilityPicker";
 
-export function EditPostForm({ id, body, visibility }: { id: string; body: string; visibility: Visibility }) {
+export function EditPostForm({
+  id,
+  body,
+  visibility,
+  isAnonymous = false,
+}: {
+  id: string;
+  body: string;
+  visibility: Visibility;
+  isAnonymous?: boolean;
+}) {
   const [state, action, pending] = useActionState(updatePost, undefined);
 
   return (
@@ -14,11 +24,18 @@ export function EditPostForm({ id, body, visibility }: { id: string; body: strin
       <form action={action} className="mt-2 space-y-2">
         <input type="hidden" name="id" value={id} />
         <textarea name="body" defaultValue={body} rows={4} maxLength={MAX_POST_LENGTH} required className="input resize-none" />
-        <VisibilityPicker defaultValue={visibility} />
+        {isAnonymous ? (
+          <>
+            <input type="hidden" name="visibility" value="public" />
+            <p className="text-xs text-muted">Anonymous posts are always public.</p>
+          </>
+        ) : (
+          <VisibilityPicker defaultValue={visibility} />
+        )}
         <button type="submit" className="btn-primary" disabled={pending}>
           {pending ? "Saving…" : "Save"}
         </button>
-        {state?.error && <p role="alert" className="text-red-700">{state.error}</p>}
+        {state?.error && <p role="alert" className="text-danger">{state.error}</p>}
         {state?.ok && <p className="text-muted">{state.message}</p>}
       </form>
     </details>
@@ -38,7 +55,7 @@ export function EditReplyForm({ id, postId, body }: { id: string; postId: string
         <button type="submit" className="btn-primary" disabled={pending}>
           {pending ? "Saving…" : "Save"}
         </button>
-        {state?.error && <p role="alert" className="text-red-700">{state.error}</p>}
+        {state?.error && <p role="alert" className="text-danger">{state.error}</p>}
         {state?.ok && <p className="text-muted">{state.message}</p>}
       </form>
     </details>

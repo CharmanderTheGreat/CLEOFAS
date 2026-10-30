@@ -35,7 +35,7 @@ export function ActionForm({ action, fields, children, className, pendingLabel, 
         {pending && pendingLabel ? pendingLabel : children}
       </button>
       {state?.error && (
-        <p role="alert" className="text-xs text-red-700">
+        <p role="alert" className="text-xs text-danger">
           {state.error}
         </p>
       )}

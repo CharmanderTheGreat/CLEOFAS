@@ -32,7 +32,7 @@ export function ReportDialog({ postId, replyId }: { postId?: string; replyId?: s
           <button type="submit" className="btn-danger" disabled={pending}>
             {pending ? "Sending…" : "Send report"}
           </button>
-          {state?.error && <p role="alert" className="text-red-700">{state.error}</p>}
+          {state?.error && <p role="alert" className="text-danger">{state.error}</p>}
         </form>
       )}
     </details>

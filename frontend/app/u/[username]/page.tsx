@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BlockButton } from "@/components/BlockButton";
 import { FollowButton } from "@/components/FollowButton";
-import { PostCard } from "@/components/PostCard";
+import { PostList } from "@/components/PostList";
 import { requireOnboarded } from "@/lib/auth";
 import { USERNAME_REGEX } from "@/lib/constants";
 import { fetchPosts } from "@/lib/posts";
@@ -15,13 +15,10 @@ export async function generateMetadata({ params }: { params: Promise<{ username:
 
 export default async function ProfilePage({
   params,
-  searchParams,
 }: {
   params: Promise<{ username: string }>;
-  searchParams: Promise<{ before?: string }>;
 }) {
   const { username } = await params;
-  const { before } = await searchParams;
   if (!USERNAME_REGEX.test(username)) notFound();
 
   const { supabase, user } = await requireOnboarded();
@@ -50,8 +47,9 @@ export default async function ProfilePage({
   const iFollow = Boolean(iFollowRes.data);
   const followsMe = Boolean(followsMeRes.data);
 
-  // Mutuals-only posts are hidden unless the viewer is a mutual (or the author). One call incl. reply counts.
-  const { posts, hasMore } = await fetchPosts(supabase, { authorId: profile.id, before });
+  // Mutuals-only posts are hidden unless the viewer is a mutual (or the author). Anonymous posts never show
+  // here (except to their own author). One call incl. reply counts; the rest loads while scrolling.
+  const { posts, hasMore } = await fetchPosts(supabase, { authorId: profile.id });
 
   return (
     <div className="space-y-6">
@@ -91,23 +89,13 @@ export default async function ProfilePage({
         </div>
       </section>
 
-      {posts.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted">No posts you can see yet.</p>
-      ) : (
-        <div className="space-y-3">
-          {posts.map((post) => (
-            <PostCard key={post.id} post={post} viewerId={user.id} replyCount={post.reply_count ?? 0} />
-          ))}
-        </div>
-      )}
-
-      {hasMore && (
-        <div className="text-center">
-          <Link href={`/u/${profile.username}?before=${encodeURIComponent(posts[posts.length - 1].created_at)}`} className="btn-ghost">
-            Older posts
-          </Link>
-        </div>
-      )}
+      <PostList
+        key={profile.id}
+        initialPosts={posts}
+        initialHasMore={hasMore}
+        authorId={profile.id}
+        emptyMessage="No posts you can see yet."
+      />
     </div>
   );
 }

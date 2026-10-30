@@ -6,6 +6,9 @@ import { createClient } from "@/lib/supabase/server";
 import {
   MAX_BIO_LENGTH,
   MAX_DISPLAY_NAME_LENGTH,
+  MAX_MUTED_WORDS,
+  MAX_MUTED_WORD_LENGTH,
+  MUTED_WORD_REGEX,
   MAX_POST_LENGTH,
   MAX_REPLY_LENGTH,
   MAX_REPORT_REASON_LENGTH,
@@ -16,7 +19,8 @@ import {
   VISIBILITIES,
   type Visibility,
 } from "@/lib/constants";
-import type { FormState } from "@/lib/types";
+import { fetchPosts } from "@/lib/posts";
+import type { FormState, PostRow } from "@/lib/types";
 
 // Helpers ---------------------------------------------------------------------
 
@@ -158,7 +162,13 @@ export async function createPost(_prev: FormState, formData: FormData): Promise<
   if (body.length > MAX_POST_LENGTH) return { error: `Posts can be at most ${MAX_POST_LENGTH} characters.` };
   if (!isVisibility(visibility)) return { error: "Invalid visibility." };
 
-  const { error } = await supabase.from("posts").insert({ author_id: user.id, body, visibility });
+  const isAnonymous = formData.get("anonymous") === "on";
+  // Anonymous posts are public only: on a mutuals-only post the audience is too small to hide in.
+  if (isAnonymous && visibility !== "public") return { error: "Anonymous posts must be public." };
+
+  const { error } = await supabase
+    .from("posts")
+    .insert({ author_id: user.id, body, visibility, is_anonymous: isAnonymous });
   if (error) return { error: friendly(error) };
 
   revalidatePath("/");
@@ -336,4 +346,96 @@ export async function reportContent(_prev: FormState, formData: FormData): Promi
   if (error) return { error: friendly(error) };
 
   return { ok: true, message: "Report sent. Thank you for helping keep Cleofas safe." };
+}
+
+// Feed ------------------------------------------------------------------------
+
+// Infinite scroll: the next page of posts after the cursor (created_at, id) of the last post shown.
+export async function loadMorePosts(input: {
+  authorId: string | null;
+  followingOnly: boolean;
+  before: string;
+  beforeId: string;
+}): Promise<{ posts: PostRow[]; hasMore: boolean } | { error: string }> {
+  const { supabase } = await context();
+  if (input.authorId && !isUuid(input.authorId)) return { error: "Something went wrong." };
+  if (!isUuid(input.beforeId) || Number.isNaN(Date.parse(input.before))) return { error: "Something went wrong." };
+
+  try {
+    return await fetchPosts(supabase, {
+      authorId: input.authorId,
+      followingOnly: input.followingOnly,
+      before: input.before,
+      beforeId: input.beforeId,
+    });
+  } catch {
+    return { error: "Couldn't load more posts. Please try again." };
+  }
+}
+
+// Muted words ---------------------------------------------------------------------
+
+export async function updateMutedWords(_prev: FormState, formData: FormData): Promise<FormState> {
+  const { supabase, user } = await context();
+
+  const words = [
+    ...new Set(
+      text(formData, "words")
+        .split(/[,\n]/)
+        .map((word) => word.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  ];
+  if (words.length > MAX_MUTED_WORDS) return { error: `You can mute at most ${MAX_MUTED_WORDS} words.` };
+  const bad = words.find((word) => word.length > MAX_MUTED_WORD_LENGTH || !MUTED_WORD_REGEX.test(word));
+  if (bad) {
+    return {
+      error: `"${bad.slice(0, 20)}" isn't allowed. Use letters, numbers and spaces, up to ${MAX_MUTED_WORD_LENGTH} characters.`,
+    };
+  }
+
+  const { error } = await supabase.from("profile_private").update({ muted_words: words }).eq("id", user.id);
+  if (error) return { error: friendly(error) };
+
+  revalidatePath("/", "layout");
+  return { ok: true, message: words.length === 0 ? "No muted words." : `Muting ${words.length} word${words.length === 1 ? "" : "s"}.` };
+}
+
+// Notifications ---------------------------------------------------------------------
+
+export async function markNotificationsRead(): Promise<void> {
+  const { supabase } = await context();
+  await supabase.rpc("mark_notifications_read");
+  revalidatePath("/", "layout");
+}
+
+// Moderation (admins only: the database functions reject everyone else) ----------------------
+
+export async function adminSetReportStatus(_prev: FormState, formData: FormData): Promise<FormState> {
+  const { supabase } = await context();
+
+  const id = text(formData, "id");
+  const status = text(formData, "status");
+  if (!isUuid(id) || !["open", "reviewed", "dismissed"].includes(status)) return FAILED;
+
+  const { data, error } = await supabase.rpc("admin_set_report_status", { p_report_id: id, p_status: status });
+  if (error) return { error: friendly(error) };
+  if (data !== true) return { error: "Report not found." };
+
+  revalidatePath("/admin");
+  return { ok: true };
+}
+
+export async function adminRemoveTarget(_prev: FormState, formData: FormData): Promise<FormState> {
+  const { supabase } = await context();
+
+  const id = text(formData, "id");
+  if (!isUuid(id)) return FAILED;
+
+  const { data, error } = await supabase.rpc("admin_remove_target", { p_report_id: id });
+  if (error) return { error: friendly(error) };
+  if (data !== true) return { error: "Nothing was removed. It may already be gone." };
+
+  revalidatePath("/admin");
+  return { ok: true };
 }

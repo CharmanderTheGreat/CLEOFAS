@@ -2,8 +2,12 @@
 
 A web app where people can post rants, and others can reply depending on the post's privacy setting (public or friends/mutuals).
 
-Status: Planning -> MVP
-Platform: Web app (PWA-ready), free tier stack
+<p>
+  <img src="https://skillicons.dev/icons?i=nextjs,react,ts,tailwind,supabase,postgres,vercel,nodejs,github" alt="Next.js, React, TypeScript, Tailwind CSS, Supabase, PostgreSQL, Vercel, Node.js, GitHub" />
+</p>
+
+Status: MVP and Phase 2 built (see section 9)
+Platform: Web app (installable PWA), free tier stack
 
 ---
 
@@ -36,6 +40,7 @@ Platform: Web app (PWA-ready), free tier stack
   - Public: any logged-in user can see and reply
   - Mutuals: only mutual follows can see and reply
 - Edit and delete own posts
+- Anonymous posting: tick "Post anonymously" when writing. Anonymous posts are always public, the author is hidden from everyone (even on the author's profile and in Following), and a block never reveals or hides them. Moderators can still see the author when a post is reported
 
 ### 3.3 Replies
 - Who can reply follows the post's visibility:
@@ -53,27 +58,73 @@ Platform: Web app (PWA-ready), free tier stack
 ### 3.5 Feed
 - Home feed: posts from people you follow plus public posts (chronological first)
 - Profile page: a user's posts, filtered by the visibility rules
+- Infinite scroll on the feed and on profiles (cursor paging by created_at + id)
+- Muted words (Settings): posts and other people's replies that contain a muted word are hidden from you. Whole words, not case sensitive, up to 30 words
+
+### 3.5b Notifications and live updates
+- Notification when someone replies to your post (bell link with an unread badge). Anonymous repliers are never named
+- Replies and the unread badge update live (Supabase Realtime). The live events carry no content, the page re-reads through the normal functions, so nothing can leak through realtime
+- Installable as an app (PWA): manifest, icons and an offline page. Nothing personal is cached on the device
+
+### 3.5c Moderation
+- Admins get a Moderation page (Settings > Moderator tools) with open, reviewed and dismissed reports. Each report keeps a copy of the text and the real author, even if the content is deleted. Admins can mark reports, dismiss them or remove the content
+- Admins are rows in the admins table, and every admin action goes through a database function that checks it. The app never uses the service key
 
 ### 3.6 Safety (part of the MVP, not optional)
 - Report a post or reply
 - Block a user (hidden from each other, cannot reply). Blocking hides the blocked user's posts and NON-anonymous replies only; anonymous replies are never hidden by a block (see section 6)
 - Rate limiting on posts and replies
 - Crisis resources link on the footer and compose page
-- Basic content filter (slurs, spam) in phase 2 if time is short
+- Basic content filter (slurs, spam): muted words are built (each user chooses their own). A shared slur/spam filter is still open
 
 ---
 
 ## 4. Tech Stack
 
-| Layer | Choice | Why |
+| | Layer | Choice | Why |
+|---|---|---|---|
+| <img src="https://skillicons.dev/icons?i=nextjs" width="32" alt="Next.js" /> | Frontend framework | Next.js 16 (App Router, Server Actions, proxy) | SSR, one codebase for pages and server code |
+| <img src="https://skillicons.dev/icons?i=react" width="32" alt="React" /> | UI | React 19 | Components, `useActionState` forms |
+| <img src="https://skillicons.dev/icons?i=ts" width="32" alt="TypeScript" /> | Language | TypeScript | Safer code |
+| <img src="https://skillicons.dev/icons?i=tailwind" width="32" alt="Tailwind CSS" /> | Styling | Tailwind CSS 4 | Fast UI work, light/dark theme with CSS variables |
+| <img src="https://skillicons.dev/icons?i=supabase" width="32" alt="Supabase" /> | Backend platform | Supabase | Auth, database API and realtime in one |
+| <img src="https://skillicons.dev/icons?i=postgres" width="32" alt="PostgreSQL" /> | Database | PostgreSQL + Row Level Security | Privacy rules that cannot be bypassed from the frontend |
+| <img src="https://skillicons.dev/icons?i=vercel" width="32" alt="Vercel" /> | Hosting | Vercel (Hobby, free) | Easy Next.js deploys |
+| <img src="https://skillicons.dev/icons?i=nodejs" width="32" alt="Node.js" /> | Tooling | Node.js, npm | Runs the app and the database tests |
+| <img src="https://skillicons.dev/icons?i=github" width="32" alt="GitHub" /> | Source | GitHub | Version control |
+
+Also used: Supabase Auth (Google sign-in only), Supabase Realtime (private broadcast channels), a small service worker (PWA), PGlite (in-memory Postgres for the RLS tests).
+
+### System structure
+
+```mermaid
+flowchart LR
+  U["User<br/>browser or installed PWA"] -->|HTTPS| F["frontend/<br/>Next.js on Vercel"]
+  F -->|"Server Actions and reads<br/>(user session)"| API["Supabase API"]
+  U -.->|"live events (no content)"| RT["Supabase Realtime"]
+  API --> DB[("PostgreSQL<br/>RLS + functions")]
+  DB -->|"reply happened<br/>(ping only)"| RT
+  AUTH["Supabase Auth<br/>Google sign-in"] --> F
+  AUTH --> DB
+  B["backend/<br/>migrations + RLS tests"] -.->|"SQL applied to"| DB
+```
+
+How a request flows:
+1. The browser asks Next.js for a page. `proxy.ts` refreshes the session and sends signed-out visitors to `/login`.
+2. The page (a Server Component) reads data through database functions such as `list_posts`, `get_post` and `get_replies`, using the signed-in user's session.
+3. The database decides what the user may see (RLS and the functions). The frontend never filters private data itself.
+4. Changes (post, reply, follow, block, report) are Server Actions. They validate input, then write with the same session, and the database checks the rules again.
+5. When someone replies, a database trigger creates a notification and sends a content-free realtime ping. Open pages re-read through the normal functions.
+
+Layers, from outside to inside:
+
+| Layer | Where | Job |
 |---|---|---|
-| Frontend | Next.js (App Router) + TypeScript | Familiar, SSR, easy to deploy |
-| Styling | Tailwind CSS | Fast UI work |
-| Hosting | Vercel or Cloudflare Pages | Free tier |
-| Backend / DB | Supabase (Postgres) | Auth, DB, and realtime in one |
-| Auth | Supabase Auth | Built in |
-| Realtime | Supabase Realtime | Live replies |
-| Privacy enforcement | Postgres Row Level Security (RLS) | Cannot be bypassed from the frontend |
+| Pages and components | `frontend/app`, `frontend/components` | What the user sees and clicks |
+| Server Actions | `frontend/app/actions.ts` | Validate input, call the database, show errors |
+| Data helpers | `frontend/lib` | Auth, post queries, constants, formatting |
+| Database functions | `backend/supabase/migrations` | Who can see what, anonymity, counts, notifications, moderation |
+| Tables with RLS | `backend/supabase/migrations` | Last line of defense: direct table access is limited to the owner |
 
 ### Free tier limits to remember
 - Supabase free projects pause after about a week of inactivity (can be resumed manually)
@@ -100,6 +151,7 @@ Private per-user settings live in profile_private (own row only, never readable 
 |---|---|
 | id | Same as the profile id |
 | default_anonymous_replies | Reply composer starts with "anonymous" ticked (the reply identity setting, section 3.3) |
+| muted_words | Up to 30 words (1-40 characters) hidden from the user's feed and replies |
 
 ### follows
 | Field | Notes |
@@ -126,6 +178,7 @@ Primary key is the pair (blocker_id, blocked_id). A user cannot block themselves
 | author_id | References profiles |
 | body | 1-1000 chars |
 | visibility | "public" or "mutuals" (default public) |
+| is_anonymous | Anonymous post (default false). Only allowed with visibility "public". Cannot be changed after posting |
 | created_at / updated_at | Timestamps |
 
 Indexes: by (author_id, created_at) and by created_at, both descending.
@@ -158,16 +211,38 @@ Anonymous reply note: author_id is still stored (needed for moderation) but must
 
 If the reported post or reply is deleted, post_id / reply_id become empty but the snapshot stays. One report per user per target.
 
+### notifications
+| Field | Notes |
+|---|---|
+| id | Unique id |
+| user_id | The post author who gets the notification |
+| post_id / reply_id | What happened. Deleting the reply deletes the notification |
+| created_at / read_at | Timestamps (read_at empty = unread) |
+
+Only ids are stored. The replier's name is looked up when reading, and only for non-anonymous replies. Clients cannot read this table directly, only through get_notifications().
+
+### admins
+| Field | Notes |
+|---|---|
+| user_id | A profile that is a moderator |
+| created_at | Timestamp |
+
+No client can read or write this table. Add an admin once from the Supabase SQL Editor (section 8).
+
 ### Helper logic (database functions)
 - is_mutual(a, b): true when a follows b and b follows a
 - is_blocked(a, b): true when either user has blocked the other
 - Both is_* helpers run with elevated rights so RLS policies can call them safely
-- get_replies(post): the only way to read replies; hides author_id / username for anonymous replies
-- list_posts(author, following_only, before, limit): feed and profile posts with author and visible reply count in one call
+- post_visible(author, visibility, anonymous): the one place that decides if you may see a post. Anonymous posts ignore blocks on purpose
+- get_post(post) / list_posts(author, following_only, before, limit, before_id): posts for the post page, feed and profiles, with the author blanked for anonymous posts and the visible reply count included
+- get_replies(post): the only way to read replies; hides author_id / username for anonymous replies and applies blocks and muted words
+- get_notifications(), unread_notification_count(), mark_notifications_read(): notifications, with the same block rule as replies
+- is_admin(), admin_list_reports(), admin_set_report_status(), admin_remove_target(): moderation, all check is_admin() first
 - search_profiles(term): username prefix search without yourself or blocked users, in one call
 - complete_onboarding(...): sets the username, display name and bio
 - delete_my_account(): deletes the user and everything they own
 - A trigger on new auth users auto-creates a profile (temporary username) and its profile_private row
+- A trigger on new replies creates the notification and sends the realtime ping (the ping never carries content and can never block a reply)
 
 ---
 
@@ -177,8 +252,8 @@ RLS must be enabled on every table. Privacy is enforced in the database, never o
 
 | Action | Rule |
 |---|---|
-| View post | Author, OR (public AND not blocked), OR (mutuals AND mutual AND not blocked) |
-| Create post | Authenticated, and author is the current user |
+| View post | Author, OR anonymous (public by rule, blocks ignored), OR (public AND not blocked), OR (mutuals AND mutual AND not blocked). Other people's anonymous posts are only returned by get_post / list_posts, never by a direct table read |
+| Create post | Authenticated, and author is the current user. Anonymous posts must be public |
 | Edit / delete post | Author only |
 | View reply | Only if the parent post is visible. Non-anonymous replies are also hidden when either side blocked the other. Anonymous replies are never hidden by a block |
 | Create reply | Only if the parent post is visible, not blocked, and author is the current user |
@@ -187,7 +262,11 @@ RLS must be enabled on every table. Privacy is enforced in the database, never o
 | Block / unblock | Own block rows only |
 | View profiles | Any authenticated user (public fields only; private settings are in profile_private, own row only) |
 | Create report | Authenticated, reporter is the current user, target visible to them |
-| View reports | Own reports only, without target_author_id / target_body (admin review handled separately) |
+| View reports | Own reports only, without target_author_id / target_body. Admins read all reports through admin_list_reports() |
+| Notifications | Closed table. Read your own through get_notifications() only |
+| Muted words | Own row only (profile_private) |
+| Moderation | Only users in the admins table, checked inside each function |
+| Realtime channels | post:<id> only for people who can see the post, user:<id> only for that user |
 
 Notes:
 - Reply visibility piggybacks on post visibility: if you cannot see the post, you cannot see or add replies.
@@ -195,23 +274,41 @@ Notes:
 - Anonymous replies hide the replier's identity from everyone except moderators.
 - Blocks must NOT hide anonymous replies. If they did, a post author could block a suspect and see whether the reply disappears (and unblock to repeat), which unmasks the replier. Blocks only hide non-anonymous replies, where the author is already visible.
 - Anonymous replies on mutuals-only posts come from a small group (only mutuals can reply), so they are easier to guess. This is not a bug, and the reply form tells the user.
+- Anonymous posts follow the same idea: if blocks hid them, blocking a suspect would reveal the author. They are public only, never shown on the author's profile or in the Following tab (appearing there would show the author is someone you follow), and the author is blanked in the database, not in the frontend.
+- Notifications about anonymous replies never name the replier, and a notification disappears only when its reply is deleted.
 - Known limit: after a block the blocked user can no longer see or reply to the blocker's future posts. In a very small group the post author can notice that replies stopped, so anonymity is strong on public posts and weaker on small mutuals posts.
 
 ---
 
-## 7. Suggested Project Structure
+## 7. Project Structure
 
-- README.md: this document (plan, data model, rules, roadmap)
-- SETUP.md: how to set up and run everything
-- frontend/: the Next.js app
-  - app/: routes (login, onboarding, feed, post page, profile page, search, settings)
-  - components/: PostCard, PostComposer, ReplyList, FollowButton, BlockButton, ActionForm, ReportDialog, and more
-  - lib/: Supabase clients (browser and server), auth helper, post queries, constants
-  - proxy.ts: refreshes the session and sends signed-out visitors to /login
-  - public/: PWA manifest and icons (Phase 2)
-- backend/: the Supabase database, where all privacy rules live
-  - supabase/migrations/: SQL for the schema, functions, RLS and hardening (0001 to 0005)
-  - tests/rls.test.mjs: the section 10 checklist, run against an in-memory Postgres
+```
+CLEOFAS/
+├─ README.md                     this document (plan, data model, rules, roadmap)
+├─ SETUP.md                      how to set up and run everything
+├─ frontend/                     Next.js app (deploy this folder to Vercel)
+│  ├─ app/
+│  │  ├─ layout.tsx              header, theme script, notifications badge, live refresh
+│  │  ├─ page.tsx                home feed (Everyone / Following)
+│  │  ├─ actions.ts              all Server Actions (posts, replies, follow, block, report, admin)
+│  │  ├─ login/ auth/ onboarding/
+│  │  ├─ post/[id]/              post page with replies (live)
+│  │  ├─ u/[username]/           profile, followers, following
+│  │  ├─ search/ settings/ help/
+│  │  ├─ notifications/          reply notifications
+│  │  ├─ admin/                  moderation (admins only)
+│  │  ├─ manifest.ts, icon.png   PWA manifest and icons
+│  │  └─ globals.css             theme tokens (sage green light, pastel green dark)
+│  ├─ components/                PostCard, PostList (infinite scroll), PostComposer, ReplyList,
+│  │                             ActionForm, ThemeToggle, LiveRefresh, MutedWordsForm, ...
+│  ├─ lib/                       auth helper, post queries, supabase clients, constants, types
+│  ├─ public/                    sw.js (service worker), offline.html, icons/
+│  └─ proxy.ts                   refreshes the session, sends signed-out visitors to /login
+└─ backend/                      the database, where all privacy rules live
+   ├─ supabase/migrations/       0001 schema, 0002 functions, 0003 RLS, 0004 hardening,
+   │                             0005 remove age gate, 0006 phase 2
+   └─ tests/rls.test.mjs         the section 10 checklist, run against an in-memory Postgres
+```
 
 ---
 
@@ -219,19 +316,20 @@ Notes:
 
 1. Create a Supabase project (free tier)
 2. Create the tables, helper functions, trigger, and RLS policies from sections 5 and 6 as migration files
-3. Enable Realtime on posts and replies
+3. Realtime: nothing to turn on for tables. The app uses private broadcast channels (migration 0006 creates the policy). If live updates do not work, check that Realtime is enabled for the project and that "Allow public access" is off in Realtime settings
 4. Create the Next.js project with TypeScript and Tailwind
 5. Add the Supabase client libraries and environment variables (project URL and anon key)
-6. Deploy to Vercel and set the same environment variables there
+6. Deploy to Vercel (Root Directory: `frontend`) and set the same environment variables there
+7. To become a moderator, sign in once, then run in the SQL Editor: `insert into public.admins (user_id) select id from public.profiles where username = 'your_username';`
 
 ---
 
 ## 9. Build Roadmap
 
 ### Phase 0 - Setup
-- [ ] Supabase project and env vars
+- [x] Supabase project and env vars
 - [x] Schema and RLS
-- [ ] Next.js project deployed to Vercel
+- [ ] Next.js project deployed to Vercel (runs locally; deploy with Root Directory `frontend`)
 
 ### Phase 1 - MVP
 - [x] Auth (sign up, log in, log out)
@@ -254,14 +352,15 @@ Notes:
 - [x] One-call feed, profile posts and search (no N+1)
 - [x] Rate limit on blocks, reserved usernames, delete my account, security headers
 
-### Phase 2 - Improve
-- [ ] Realtime replies
-- [ ] Notifications (reply on your post). Must follow the anonymous reply rules: never include the replier for anonymous replies, never send "reply hidden / removed" events
-- [ ] PWA install support
-- [ ] Anonymous posting option
-- [ ] Muted words and filters
-- [ ] Admin moderation page for reports (use the service role; reports already keep target_author_id and target_body)
-- [ ] Infinite scroll (the "Older posts" paging exists already)
+### Phase 2 - Improve (2026-10-29, migration 0006)
+- [x] Realtime replies and live notification badge (content-free private channels)
+- [x] Notifications (reply on your post). Anonymous repliers are never named, no "reply hidden / removed" events
+- [x] PWA install support (manifest, icons, offline page, service worker that caches nothing private). Needs HTTPS, so it works after the Vercel deploy
+- [x] Anonymous posting option (public only, blocks never reveal it)
+- [x] Muted words
+- [x] Admin moderation page for reports (database functions with an admins table, no service key)
+- [x] Infinite scroll
+- [x] Theme: sage/pastel green with an animated light/dark switch (remembers your choice, follows your device at first)
 
 ### Phase 3 - Later
 - [ ] "Vent mode" (posts auto-delete after X days)
@@ -276,19 +375,26 @@ Notes:
 
 | Scenario | Expected |
 |---|---|
-| User A posts public, User B does not follow User A | User B can see and reply |
-| User A posts mutuals, User B follows User A only (not mutual) | User B cannot see |
-| User A posts mutuals, User A and User B are mutual | User B can see and reply |
-| User A blocks User B, User A posts public | User B cannot see |
-| User B blocks User A | User A cannot see User B's posts or reply to them |
-| User B replies to User A's post, User A deletes the reply | Success |
-| User C tries to delete User B's reply | Denied |
+| A posts public, B does not follow A | B can see and reply |
+| A posts mutuals, B follows A only (not mutual) | B cannot see |
+| A posts mutuals, A and B are mutual | B can see and reply |
+| A blocks B, A posts public | B cannot see |
+| B blocks A | A cannot see B's posts or reply to them |
+| B replies to A's post, A deletes the reply | Success |
+| C tries to delete B's reply | Denied |
 | Unauthenticated visitor | No access |
-| User B replies anonymously, User A blocks User B, then unblocks | User A sees the same anonymous reply every time, never the author |
-| User B replies with his name, User A blocks User B | User A no longer sees that reply. Reply counts match |
+| B replies anonymously, A blocks B, then unblocks | A sees the same anonymous reply every time, never the author |
+| B replies with his name, A blocks B | A no longer sees that reply. Reply counts match |
 | Reporter reads own report | Cannot read target_author_id or target_body |
 | Reported reply is deleted | The report keeps the text and the author id |
 | Another user reads profile_private | Sees only their own row |
+| Anonymous post, viewer is not the author | author_id and username are null; a direct table read returns nothing |
+| Anonymous post, A blocks B and unblocks | A sees the same post every time (no oracle) |
+| Anonymous post on a profile or in Following | Not shown (only the author sees it on their own profile) |
+| Anonymous reply | Notification never names the replier; blocks hide only named replies; counts match |
+| Muted words | Hide others' posts and replies, never your own; regex characters are escaped; max 30 words |
+| Cursor paging with equal timestamps | No repeats, no skips |
+| Non-admin calls admin functions | Rejected. Admins see the real author of a reported anonymous reply |
 | Same user reports the same target twice | Second report is rejected |
 
 ---
@@ -325,3 +431,4 @@ Notes:
 - 2026-10-29: Security and efficiency pass (migration 0004, 32 tests passing). Fixed block-based deanonymization of anonymous replies; mutuals-only anonymity note shown to users; default_anonymous_replies moved to profile_private (it was readable by every user); reports keep a snapshot and hide the real author from reporters; delete/follow/block show errors; feed, profile posts and search are one database call each; block rate limit, reserved usernames, delete account, security headers, error page, getClaims instead of getUser on reads.
 - 2026-10-29: Migration 0005 removes the stored age gate (side project). Age is now only a notice on the login page. 31 tests passing.
 - 2026-10-29: Repo split into frontend/ (Next.js) and backend/ (Supabase migrations + RLS tests). Same system, only the folders changed. Run the tests from backend/ (npm test).
+- 2026-10-29: Phase 2 built (migration 0006, 45 tests passing): anonymous posts, notifications, realtime, muted words, admin moderation, infinite scroll, PWA. New sage/pastel green theme with animated dark/light switch. README now has the tech stack with icons and the system structure. Phase 0: Supabase project and env vars checked, Vercel deploy still open.

@@ -4,6 +4,10 @@ export const MAX_BIO_LENGTH = 160;
 export const MAX_DISPLAY_NAME_LENGTH = 50;
 export const MAX_REPORT_REASON_LENGTH = 500;
 export const FEED_PAGE_SIZE = 20;
+export const MAX_MUTED_WORDS = 30;
+export const MAX_MUTED_WORD_LENGTH = 40;
+// A muted word: letters/numbers first, then letters, numbers, spaces, apostrophe, hyphen, underscore.
+export const MUTED_WORD_REGEX = /^[\p{L}\p{N}][\p{L}\p{N} '_-]*$/u;
 
 // Minimum age shown as a notice on the login page (README.md section 11). Not verified or stored.
 export const MIN_AGE = 13;

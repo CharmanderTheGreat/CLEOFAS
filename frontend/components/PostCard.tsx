@@ -8,14 +8,14 @@ import { ReportDialog } from "./ReportDialog";
 
 type Props = {
   post: PostRow;
-  viewerId: string;
+  viewerId?: string;
   replyCount?: number;
   // On the post page we show the full controls (edit, delete, report).
   detailed?: boolean;
 };
 
 export function PostCard({ post, viewerId, replyCount = 0, detailed = false }: Props) {
-  const isMine = post.author_id === viewerId;
+  const isMine = post.is_mine;
   const author = post.author;
   const edited = post.updated_at !== post.created_at;
 
@@ -27,17 +27,17 @@ export function PostCard({ post, viewerId, replyCount = 0, detailed = false }: P
             {author.display_name || `@${author.username}`}
           </Link>
         ) : (
-          <span className="font-semibold">Unknown</span>
+          <span className="font-semibold">Anonymous{isMine ? " (you)" : ""}</span>
         )}
         {author?.display_name && <span className="text-muted">@{author.username}</span>}
         <span className="text-muted">·</span>
-        <time dateTime={post.created_at} title={fullDate(post.created_at)} className="text-muted">
+        <time dateTime={post.created_at} title={fullDate(post.created_at)} className="text-muted" suppressHydrationWarning>
           {timeAgo(post.created_at)}
         </time>
         {edited && <span className="text-xs text-muted">(edited)</span>}
         <span
           className={`ml-auto rounded-full px-2 py-0.5 text-xs ${
-            post.visibility === "public" ? "bg-accent-soft text-accent" : "bg-stone-100 text-stone-700"
+            post.visibility === "public" ? "bg-accent-soft text-accent" : "bg-chip text-muted"
           }`}
         >
           {post.visibility === "public" ? "Public" : "Mutuals"}
@@ -54,7 +54,7 @@ export function PostCard({ post, viewerId, replyCount = 0, detailed = false }: P
         )}
         {detailed && isMine && (
           <>
-            <EditPostForm id={post.id} body={post.body} visibility={post.visibility} />
+            <EditPostForm id={post.id} body={post.body} visibility={post.visibility} isAnonymous={post.is_anonymous} />
             <ActionForm
               action={deletePost}
               fields={{ id: post.id }}

@@ -8,7 +8,7 @@ export function DeleteAccountForm() {
 
   return (
     <details className="card space-y-3 text-sm">
-      <summary className="cursor-pointer font-medium text-red-700">Delete my account</summary>
+      <summary className="cursor-pointer font-medium text-danger">Delete my account</summary>
       <form action={action} className="mt-3 space-y-3">
         <p className="text-muted">
           This permanently deletes your profile, posts, replies, follows and blocks. It can&apos;t be undone. Reports you
@@ -22,7 +22,7 @@ export function DeleteAccountForm() {
           {pending ? "Deleting…" : "Delete everything"}
         </button>
         {state?.error && (
-          <p role="alert" className="text-red-700">
+          <p role="alert" className="text-danger">
             {state.error}
           </p>
         )}

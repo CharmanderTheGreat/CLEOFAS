@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { BlockButton } from "@/components/BlockButton";
 import { DeleteAccountForm } from "@/components/DeleteAccountForm";
+import { MutedWordsForm } from "@/components/MutedWordsForm";
 import { ProfileForm } from "@/components/ProfileForm";
-import { requireOnboarded } from "@/lib/auth";
+import { getIsAdmin, requireOnboarded } from "@/lib/auth";
 
 export const metadata: Metadata = { title: "Settings" };
 
@@ -19,6 +20,8 @@ export default async function SettingsPage() {
 
   if (error) throw new Error("Could not load settings.");
 
+  const isAdmin = await getIsAdmin();
+
   const blocked = ((data ?? []) as unknown as { blocked_id: string; blocked: { username: string } | null }[]).filter(
     (row) => row.blocked,
   );
@@ -28,6 +31,11 @@ export default async function SettingsPage() {
       <section className="space-y-3">
         <h1 className="text-xl font-bold">Settings</h1>
         <ProfileForm mode="settings" profile={profile} />
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">Filters</h2>
+        <MutedWordsForm words={profile.muted_words} />
       </section>
 
       <section className="space-y-3">
@@ -45,6 +53,15 @@ export default async function SettingsPage() {
           </ul>
         )}
       </section>
+
+      {isAdmin && (
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold">Moderator tools</h2>
+          <Link href="/admin" className="btn-ghost">
+            Open moderation page
+          </Link>
+        </section>
+      )}
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Danger zone</h2>
