@@ -14,3 +14,12 @@ export function timeAgo(iso: string, now: number = Date.now()): string {
 export function fullDate(iso: string): string {
   return new Date(iso).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" });
 }
+
+// "2d left", "5h left", "10m left" for vent-mode posts.
+export function timeLeft(iso: string, now: number = Date.now()): string {
+  const minutes = Math.max(0, Math.floor((new Date(iso).getTime() - now) / 60000));
+  if (minutes < 60) return `${Math.max(1, minutes)}m left`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h left`;
+  return `${Math.floor(hours / 24)}d left`;
+}

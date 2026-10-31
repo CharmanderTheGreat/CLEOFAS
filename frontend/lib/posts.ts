@@ -2,9 +2,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { FEED_PAGE_SIZE, UUID_REGEX } from "@/lib/constants";
 import type { PostRow } from "@/lib/types";
 
-type ListedPost = Omit<PostRow, "author" | "reply_count"> & {
+type ListedPost = Omit<PostRow, "author" | "reply_count" | "reactions" | "my_reaction"> & {
+  reactions: PostRow["reactions"] | null;
+  my_reaction: PostRow["my_reaction"];
   author_username: string | null;
-  author_display_name: string | null;
+  author_avatar: string | null;
   reply_count: number | string;
 };
 
@@ -16,10 +18,14 @@ export function toPostRow(row: ListedPost): PostRow {
     visibility: row.visibility,
     is_anonymous: row.is_anonymous,
     is_mine: row.is_mine,
+    content_warning: row.content_warning,
+    expires_at: row.expires_at,
     created_at: row.created_at,
     updated_at: row.updated_at,
-    author: row.author_username ? { username: row.author_username, display_name: row.author_display_name } : null,
+    author: row.author_username ? { username: row.author_username, avatar_path: row.author_avatar } : null,
     reply_count: Number(row.reply_count),
+    reactions: row.reactions ?? {},
+    my_reaction: row.my_reaction ?? null,
   };
 }
 

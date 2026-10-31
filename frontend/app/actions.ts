@@ -2,10 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { cooldownEnds, detectImage, formatCooldown } from "@/lib/avatar";
 import { createClient } from "@/lib/supabase/server";
 import {
+  AVATAR_MAX_BYTES,
   MAX_BIO_LENGTH,
-  MAX_DISPLAY_NAME_LENGTH,
+  MAX_CONTENT_WARNING_LENGTH,
   MAX_MUTED_WORDS,
   MAX_MUTED_WORD_LENGTH,
   MUTED_WORD_REGEX,
@@ -14,7 +16,11 @@ import {
   MAX_REPORT_REASON_LENGTH,
   RESERVED_USERNAMES,
   TEMP_USERNAME_REGEX,
-  USERNAME_REGEX,
+  USERNAME_MAX_LENGTH,
+  USERNAME_MIN_LENGTH,
+  VENT_OPTIONS,
+  isValidUsername,
+  REACTIONS,
   UUID_REGEX,
   VISIBILITIES,
   type Visibility,
@@ -51,6 +57,9 @@ function friendly(error: DbError): string {
   if (error.message.includes("rate_limit_exceeded")) {
     return "You're doing that too fast. Please wait a few minutes and try again.";
   }
+  if (error.message.includes("cooldown_username")) return "You can only change your username once every 7 days.";
+  if (error.message.includes("cooldown_avatar")) return "You can only change your picture once every 7 days.";
+  if (error.message.includes("invalid_username")) return "That username isn't allowed. Please pick another one.";
   if (error.code === "23505") {
     if (error.message.includes("reports_unique")) return "You already reported this.";
     return "That username is already taken.";
@@ -92,25 +101,27 @@ export async function deleteAccount(_prev: FormState, formData: FormData): Promi
 
 function validateProfileFields(formData: FormData) {
   const username = text(formData, "username").trim().toLowerCase();
-  const displayName = text(formData, "displayName").trim();
   const bio = text(formData, "bio").trim();
 
-  if (!USERNAME_REGEX.test(username)) {
-    return { error: "Username must be 3-20 characters: lowercase letters, numbers and underscore only." } as const;
+  if (username.length < USERNAME_MIN_LENGTH || username.length > USERNAME_MAX_LENGTH) {
+    return { error: `Username must be ${USERNAME_MIN_LENGTH}-${USERNAME_MAX_LENGTH} characters.` } as const;
+  }
+  if (!isValidUsername(username)) {
+    return {
+      error:
+        "Use letters, numbers and _ . - only. Start and end with a letter or number, and no two symbols in a row.",
+    } as const;
   }
   if (TEMP_USERNAME_REGEX.test(username) || (RESERVED_USERNAMES as readonly string[]).includes(username)) {
     return { error: "That username isn't available. Please pick another one." } as const;
   }
-  if (displayName.length > MAX_DISPLAY_NAME_LENGTH) {
-    return { error: `Display name can be at most ${MAX_DISPLAY_NAME_LENGTH} characters.` } as const;
-  }
   if (bio.length > MAX_BIO_LENGTH) {
     return { error: `Bio can be at most ${MAX_BIO_LENGTH} characters.` } as const;
   }
-  return { username, displayName: displayName || null, bio: bio || null } as const;
+  return { username, bio: bio || null } as const;
 }
 
-// Sets the username, display name and bio (complete_onboarding).
+// Sets the username and bio (complete_onboarding). The first username is free; after that it is 7 days per change.
 export async function completeOnboarding(_prev: FormState, formData: FormData): Promise<FormState> {
   const { supabase } = await context();
 
@@ -119,7 +130,6 @@ export async function completeOnboarding(_prev: FormState, formData: FormData): 
 
   const { error } = await supabase.rpc("complete_onboarding", {
     p_username: fields.username,
-    p_display_name: fields.displayName,
     p_bio: fields.bio,
   });
   if (error) return { error: friendly(error) };
@@ -134,11 +144,13 @@ export async function updateSettings(_prev: FormState, formData: FormData): Prom
   const fields = validateProfileFields(formData);
   if ("error" in fields) return { error: fields.error };
 
+  // Only send the username when it really changed, so an unchanged name never trips the 7-day cooldown.
+  const { data: current } = await supabase.from("profiles").select("username").eq("id", user.id).maybeSingle();
+  const changes: { bio: string | null; username?: string } = { bio: fields.bio };
+  if (current && current.username !== fields.username) changes.username = fields.username;
+
   const [profile, priv] = await Promise.all([
-    supabase
-      .from("profiles")
-      .update({ username: fields.username, display_name: fields.displayName, bio: fields.bio })
-      .eq("id", user.id),
+    supabase.from("profiles").update(changes).eq("id", user.id),
     supabase
       .from("profile_private")
       .update({ default_anonymous_replies: formData.get("defaultAnonymous") === "on" })
@@ -149,6 +161,61 @@ export async function updateSettings(_prev: FormState, formData: FormData): Prom
 
   revalidatePath("/", "layout");
   return { ok: true, message: "Saved." };
+}
+
+// Profile picture ------------------------------------------------------------------
+
+// The browser shrinks the picture to 256 px first. Here we re-check size and real file type,
+// check the 7-day cooldown BEFORE uploading, and clean up the old file afterwards.
+export async function updateAvatar(formData: FormData): Promise<FormState> {
+  const { supabase, user } = await context();
+
+  const file = formData.get("avatar");
+  if (!(file instanceof File) || file.size === 0) return { error: "Choose a picture first." };
+  if (file.size > AVATAR_MAX_BYTES) return { error: "That picture is too big. Try a smaller one." };
+
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const image = detectImage(bytes);
+  if (!image) return { error: "Please use a JPG, PNG or WebP picture." };
+
+  const [privRes, profileRes] = await Promise.all([
+    supabase.from("profile_private").select("avatar_changed_at").eq("id", user.id).maybeSingle(),
+    supabase.from("profiles").select("avatar_path").eq("id", user.id).maybeSingle(),
+  ]);
+  const ends = cooldownEnds(privRes.data?.avatar_changed_at);
+  if (ends) return { error: `You can change your picture again on ${formatCooldown(ends)}.` };
+
+  const path = `${user.id}/${crypto.randomUUID().replaceAll("-", "")}.${image.ext}`;
+  const upload = await supabase.storage
+    .from("avatars")
+    .upload(path, bytes, { contentType: image.mime, upsert: false, cacheControl: "31536000" });
+  if (upload.error) return { error: "Couldn't upload the picture. Please try again." };
+
+  const { error } = await supabase.from("profiles").update({ avatar_path: path }).eq("id", user.id);
+  if (error) {
+    await supabase.storage.from("avatars").remove([path]);
+    return { error: friendly(error) };
+  }
+
+  const oldPath = profileRes.data?.avatar_path;
+  if (oldPath) await supabase.storage.from("avatars").remove([oldPath]);
+
+  revalidatePath("/", "layout");
+  return { ok: true, message: "Picture updated." };
+}
+
+export async function removeAvatar(_prev: FormState, _formData: FormData): Promise<FormState> {
+  const { supabase, user } = await context();
+
+  const { data: profile } = await supabase.from("profiles").select("avatar_path").eq("id", user.id).maybeSingle();
+  if (!profile?.avatar_path) return { ok: true };
+
+  const { error } = await supabase.from("profiles").update({ avatar_path: null }).eq("id", user.id);
+  if (error) return { error: friendly(error) };
+  await supabase.storage.from("avatars").remove([profile.avatar_path]);
+
+  revalidatePath("/", "layout");
+  return { ok: true };
 }
 
 // Posts -----------------------------------------------------------------------
@@ -163,12 +230,31 @@ export async function createPost(_prev: FormState, formData: FormData): Promise<
   if (!isVisibility(visibility)) return { error: "Invalid visibility." };
 
   const isAnonymous = formData.get("anonymous") === "on";
+
+  // Optional content warning and vent mode (the post disappears after 1, 3 or 7 days).
+  const contentWarning = text(formData, "contentWarning").trim();
+  if (contentWarning.length > MAX_CONTENT_WARNING_LENGTH) {
+    return { error: `The content warning can be at most ${MAX_CONTENT_WARNING_LENGTH} characters.` };
+  }
+  const ventRaw = text(formData, "ventDays");
+  const ventDays = ventRaw ? Number(ventRaw) : null;
+  if (ventDays !== null && !VENT_OPTIONS.some((option) => option.days === ventDays)) {
+    return { error: "Invalid vent mode choice." };
+  }
+  const expiresAt = ventDays ? new Date(Date.now() + ventDays * 24 * 60 * 60 * 1000).toISOString() : null;
   // Anonymous posts are public only: on a mutuals-only post the audience is too small to hide in.
   if (isAnonymous && visibility !== "public") return { error: "Anonymous posts must be public." };
 
   const { error } = await supabase
     .from("posts")
-    .insert({ author_id: user.id, body, visibility, is_anonymous: isAnonymous });
+    .insert({
+      author_id: user.id,
+      body,
+      visibility,
+      is_anonymous: isAnonymous,
+      content_warning: contentWarning || null,
+      expires_at: expiresAt,
+    });
   if (error) return { error: friendly(error) };
 
   revalidatePath("/");
@@ -438,4 +524,19 @@ export async function adminRemoveTarget(_prev: FormState, formData: FormData): P
 
   revalidatePath("/admin");
   return { ok: true };
+}
+
+// Reactions -------------------------------------------------------------------------
+
+// kind = null removes your reaction. One reaction per person per post, only counts are shown.
+export async function setReaction(input: { postId: string; kind: string | null }): Promise<{ error?: string }> {
+  const { supabase } = await context();
+  if (!isUuid(input.postId)) return { error: "Something went wrong." };
+  if (input.kind !== null && !REACTIONS.some((reaction) => reaction.kind === input.kind)) {
+    return { error: "Something went wrong." };
+  }
+
+  const { error } = await supabase.rpc("set_reaction", { p_post_id: input.postId, p_kind: input.kind });
+  if (error) return { error: friendly(error) };
+  return {};
 }

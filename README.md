@@ -6,7 +6,7 @@ A web app where people can post rants, and others can reply depending on the pos
   <img src="https://skillicons.dev/icons?i=nextjs,react,ts,tailwind,supabase,postgres,vercel,nodejs,github" alt="Next.js, React, TypeScript, Tailwind CSS, Supabase, PostgreSQL, Vercel, Node.js, GitHub" />
 </p>
 
-Status: MVP and Phase 2 built (see section 9)
+Status: MVP, Phase 2 and Phase 3 built (see section 9)
 Platform: Web app (installable PWA), free tier stack
 
 ---
@@ -31,8 +31,10 @@ Platform: Web app (installable PWA), free tier stack
 
 ### 3.1 Auth
 - Sign up and log in with Google (Gmail) only, no email + password
-- Unique username
-- Basic profile (display name, bio)
+- Unique username: 5-20 characters, letters, numbers and _ . - (start and end with a letter or number, no two symbols in a row). No display name: people are always shown as @username
+- Optional profile picture. Without one, the first letter of the username is shown on a soft color. Anonymous posts and replies never show a picture
+- Username and profile picture can each be changed once every 7 days (the first username pick is free). The bio can be edited any time
+- Basic profile (bio)
 
 ### 3.2 Posts (Rants)
 - Create a text post (max 1000 characters)
@@ -40,6 +42,9 @@ Platform: Web app (installable PWA), free tier stack
   - Public: any logged-in user can see and reply
   - Mutuals: only mutual follows can see and reply
 - Edit and delete own posts
+- Content warning: an optional label (up to 80 characters). The text stays hidden until the reader taps to show it
+- Vent mode: choose that a post disappears after 1, 3 or 7 days. It is hidden from everyone at once and deleted by a scheduled job
+- Reactions instead of likes: hug, relate, stay strong, care. One reaction per person per post, only counts are shown (never who reacted), and blocks never change the counts
 - Anonymous posting: tick "Post anonymously" when writing. Anonymous posts are always public, the author is hidden from everyone (even on the author's profile and in Following), and a block never reveals or hides them. Moderators can still see the author when a post is reported
 
 ### 3.3 Replies
@@ -59,6 +64,8 @@ Platform: Web app (installable PWA), free tier stack
 - Home feed: posts from people you follow plus public posts (chronological first)
 - Profile page: a user's posts, filtered by the visibility rules
 - Infinite scroll on the feed and on profiles (cursor paging by created_at + id)
+- Layout built for scrolling: the feed has no composer. A write button (pencil) opens a pop-up composer and keeps your draft if you close it. On phones a tab bar sits at the bottom (Home, Find people, Write, Notifications, Profile). On desktop the same icons are in the top bar. The active tab is highlighted
+- The crisis resources link (lifebuoy icon) is always in the top bar. It used to be a footer link, which an endless feed never reaches
 - Muted words (Settings): posts and other people's replies that contain a muted word are hidden from you. Whole words, not case sensitive, up to 30 words
 
 ### 3.5b Notifications and live updates
@@ -93,7 +100,7 @@ Platform: Web app (installable PWA), free tier stack
 | <img src="https://skillicons.dev/icons?i=nodejs" width="32" alt="Node.js" /> | Tooling | Node.js, npm | Runs the app and the database tests |
 | <img src="https://skillicons.dev/icons?i=github" width="32" alt="GitHub" /> | Source | GitHub | Version control |
 
-Also used: Supabase Auth (Google sign-in only), Supabase Realtime (private broadcast channels), a small service worker (PWA), PGlite (in-memory Postgres for the RLS tests).
+Also used: Lucide icons (navigation and buttons), Supabase Storage (profile pictures), Supabase Auth (Google sign-in only), Supabase Realtime (private broadcast channels), a small service worker (PWA), PGlite (in-memory Postgres for the RLS tests).
 
 ### System structure
 
@@ -139,8 +146,8 @@ Layers, from outside to inside:
 | Field | Notes |
 |---|---|
 | id | Same as the auth user id |
-| username | Unique, 3-20 chars, lowercase letters, numbers, underscore |
-| display_name | Optional |
+| username | Unique, 5-20 chars (older, shorter names still work), lowercase letters, numbers, _ . - |
+| avatar_path | Optional profile picture in the avatars bucket, always inside the owner's own folder |
 | bio | Max 160 chars |
 | created_at | Timestamp |
 
@@ -151,6 +158,7 @@ Private per-user settings live in profile_private (own row only, never readable 
 |---|---|
 | id | Same as the profile id |
 | default_anonymous_replies | Reply composer starts with "anonymous" ticked (the reply identity setting, section 3.3) |
+| username_changed_at / avatar_changed_at | When they were last changed. Used by the 7-day cooldown (checked by the database, not only by the app) |
 | muted_words | Up to 30 words (1-40 characters) hidden from the user's feed and replies |
 
 ### follows
@@ -179,6 +187,8 @@ Primary key is the pair (blocker_id, blocked_id). A user cannot block themselves
 | body | 1-1000 chars |
 | visibility | "public" or "mutuals" (default public) |
 | is_anonymous | Anonymous post (default false). Only allowed with visibility "public". Cannot be changed after posting |
+| content_warning | Optional label (1-80 characters). Cannot be changed after posting |
+| expires_at | Vent mode: when the post disappears (at most 30 days after posting, the app offers 1, 3 or 7). Empty = keep |
 | created_at / updated_at | Timestamps |
 
 Indexes: by (author_id, created_at) and by created_at, both descending.
@@ -192,7 +202,7 @@ Indexes: by (author_id, created_at) and by created_at, both descending.
 | body | 1-500 chars |
 | is_anonymous | True if the reply is shown without the replier's identity |
 | created_at | Timestamp |
-
+  
 Index: by (post_id, created_at).
 
 Anonymous reply note: author_id is still stored (needed for moderation) but must never be returned to other users for anonymous replies. Expose replies through a database view or function that hides author_id when is_anonymous is true, and do not let clients query the raw replies table directly.
@@ -210,6 +220,14 @@ Anonymous reply note: author_id is still stored (needed for moderation) but must
 | created_at | Timestamp |
 
 If the reported post or reply is deleted, post_id / reply_id become empty but the snapshot stays. One report per user per target.
+
+### reactions
+| Field | Notes |
+|---|---|
+| post_id / user_id | One reaction per person per post |
+| kind | hug, relate, strength or care |
+
+Clients cannot read or write this table. They use set_reaction() and see counts plus their own reaction.
 
 ### notifications
 | Field | Notes |
@@ -239,7 +257,10 @@ No client can read or write this table. Add an admin once from the Supabase SQL 
 - get_notifications(), unread_notification_count(), mark_notifications_read(): notifications, with the same block rule as replies
 - is_admin(), admin_list_reports(), admin_set_report_status(), admin_remove_target(): moderation, all check is_admin() first
 - search_profiles(term): username prefix search without yourself or blocked users, in one call
-- complete_onboarding(...): sets the username, display name and bio
+- complete_onboarding(username, bio): sets the username and bio
+- profiles_guard (trigger): checks new usernames and enforces the 7-day cooldown for username and picture
+- set_reaction(post, kind): your one reaction on a post (null removes it)
+- purge_expired_posts(): deletes vent-mode posts that expired. Runs every 15 minutes through pg_cron when available (expired posts are hidden before that anyway)
 - delete_my_account(): deletes the user and everything they own
 - A trigger on new auth users auto-creates a profile (temporary username) and its profile_private row
 - A trigger on new replies creates the notification and sends the realtime ping (the ping never carries content and can never block a reply)
@@ -263,6 +284,8 @@ RLS must be enabled on every table. Privacy is enforced in the database, never o
 | View profiles | Any authenticated user (public fields only; private settings are in profile_private, own row only) |
 | Create report | Authenticated, reporter is the current user, target visible to them |
 | View reports | Own reports only, without target_author_id / target_body. Admins read all reports through admin_list_reports() |
+| Profile picture files | Anyone can see a picture by its link. Only the owner can add or delete files, and only in their own folder |
+| Reactions | Closed table. Counts and your own reaction come from get_post / list_posts |
 | Notifications | Closed table. Read your own through get_notifications() only |
 | Muted words | Own row only (profile_private) |
 | Moderation | Only users in the admins table, checked inside each function |
@@ -299,14 +322,15 @@ CLEOFAS/
 │  │  ├─ admin/                  moderation (admins only)
 │  │  ├─ manifest.ts, icon.png   PWA manifest and icons
 │  │  └─ globals.css             theme tokens (sage green light, pastel green dark)
-│  ├─ components/                PostCard, PostList (infinite scroll), PostComposer, ReplyList,
+│  ├─ components/                PostCard, PostList (infinite scroll), ComposeDialog + PostComposer, NavBars (icon tabs),
+│                             Avatar, AvatarUploader, ReactionBar, ReplyList,
 │  │                             ActionForm, ThemeToggle, LiveRefresh, MutedWordsForm, ...
 │  ├─ lib/                       auth helper, post queries, supabase clients, constants, types
 │  ├─ public/                    sw.js (service worker), offline.html, icons/
 │  └─ proxy.ts                   refreshes the session, sends signed-out visitors to /login
 └─ backend/                      the database, where all privacy rules live
    ├─ supabase/migrations/       0001 schema, 0002 functions, 0003 RLS, 0004 hardening,
-   │                             0005 remove age gate, 0006 phase 2
+   │                             0005 remove age gate, 0006 phase 2, 0007 phase 3
    └─ tests/rls.test.mjs         the section 10 checklist, run against an in-memory Postgres
 ```
 
@@ -316,7 +340,8 @@ CLEOFAS/
 
 1. Create a Supabase project (free tier)
 2. Create the tables, helper functions, trigger, and RLS policies from sections 5 and 6 as migration files
-3. Realtime: nothing to turn on for tables. The app uses private broadcast channels (migration 0006 creates the policy). If live updates do not work, check that Realtime is enabled for the project and that "Allow public access" is off in Realtime settings
+3. Profile pictures and vent mode: migration 0007 creates the public `avatars` storage bucket and its policies by itself. For auto-delete of vent posts, turn on **pg_cron** (Dashboard > Database > Extensions) before running 0007, or run `select cron.schedule('cleofas-purge-expired', '*/15 * * * *', 'select public.purge_expired_posts()');` afterwards. Without it vent posts are still hidden when they expire
+3b. Realtime: nothing to turn on for tables. The app uses private broadcast channels (migration 0006 creates the policy). If live updates do not work, check that Realtime is enabled for the project and that "Allow public access" is off in Realtime settings
 4. Create the Next.js project with TypeScript and Tailwind
 5. Add the Supabase client libraries and environment variables (project URL and anon key)
 6. Deploy to Vercel (Root Directory: `frontend`) and set the same environment variables there
@@ -362,12 +387,14 @@ CLEOFAS/
 - [x] Infinite scroll
 - [x] Theme: sage/pastel green with an animated light/dark switch (remembers your choice, follows your device at first)
 
-### Phase 3 - Later
-- [ ] "Vent mode" (posts auto-delete after X days)
-- [ ] Reactions (hug, relate, etc.) instead of likes
-- [ ] Content warning toggle
-- [ ] Email notifications
-- [ ] Native wrapper (Capacitor) if really needed
+### Phase 3 (2026-10-31, migration 0007)
+- [x] Vent mode (post disappears after 1, 3 or 7 days)
+- [x] Reactions (hug, relate, stay strong, care) instead of likes
+- [x] Content warning
+- [x] Profile pictures with a letter fallback, no display name, 5-20 character usernames, 7-day cooldowns
+- [x] Icon navigation with an active indicator, write pop-up instead of an always-open composer, crisis link always visible
+- [ ] Email notifications: needs an email service (for example Resend) and a Supabase Edge Function with secret keys. Not started
+- [ ] Native wrapper (Capacitor): the installable PWA covers this for now
 
 ---
 
@@ -388,6 +415,13 @@ CLEOFAS/
 | Reporter reads own report | Cannot read target_author_id or target_body |
 | Reported reply is deleted | The report keeps the text and the author id |
 | Another user reads profile_private | Sees only their own row |
+| Username "abcd", "_name", "na..me", "Name1", a temporary-looking name | Rejected. "quiet.owl-2" is accepted |
+| Username or picture changed twice within 7 days | Second change is rejected by the database. Bio is always editable |
+| Picture path outside your own folder or with "../" | Rejected |
+| Anonymous post or reply | Never returns a picture |
+| Vent-mode post after it expires | Hidden from everyone (author too), cannot be replied to or reacted on, then purged |
+| Reaction | One per person; change or remove; counts only; needs access to the post; blocks do not change counts |
+| Content warning | Stored, max 80 characters, cannot be edited later |
 | Anonymous post, viewer is not the author | author_id and username are null; a direct table read returns nothing |
 | Anonymous post, A blocks B and unblocks | A sees the same post every time (no oracle) |
 | Anonymous post on a profile or in Following | Not shown (only the author sees it on their own profile) |
@@ -432,3 +466,4 @@ CLEOFAS/
 - 2026-10-29: Migration 0005 removes the stored age gate (side project). Age is now only a notice on the login page. 31 tests passing.
 - 2026-10-29: Repo split into frontend/ (Next.js) and backend/ (Supabase migrations + RLS tests). Same system, only the folders changed. Run the tests from backend/ (npm test).
 - 2026-10-29: Phase 2 built (migration 0006, 45 tests passing): anonymous posts, notifications, realtime, muted words, admin moderation, infinite scroll, PWA. New sage/pastel green theme with animated dark/light switch. README now has the tech stack with icons and the system structure. Phase 0: Supabase project and env vars checked, Vercel deploy still open.
+- 2026-10-31: Phase 3 built (migration 0007, 57 tests passing): vent mode, reactions, content warnings, profile pictures, usernames 5-20 characters without display names, 7-day cooldowns. UI: icon tab bar with active indicator, write pop-up instead of an always-open composer, crisis link moved to the top bar. Email notifications and Capacitor not built.

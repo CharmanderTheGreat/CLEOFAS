@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Avatar } from "@/components/Avatar";
 import { MarkNotificationsRead } from "@/components/MarkNotificationsRead";
 import { requireOnboarded } from "@/lib/auth";
 import { timeAgo } from "@/lib/format";
@@ -29,10 +30,12 @@ export default async function NotificationsPage() {
             <li key={item.id}>
               <Link
                 href={`/post/${item.post_id}`}
-                className={`card block space-y-1 transition hover:bg-accent-soft ${
+                className={`card flex items-start gap-3 transition hover:bg-accent-soft ${
                   item.is_read ? "" : "border-accent"
                 }`}
               >
+                <Avatar username={item.actor_username} path={item.actor_avatar} anonymous={item.is_anonymous} size={36} />
+                <div className="min-w-0 flex-1 space-y-1">
                 <p className="text-sm">
                   <span className="font-semibold">
                     {item.actor_username ? `@${item.actor_username}` : "Someone"}
@@ -46,6 +49,7 @@ export default async function NotificationsPage() {
                 </p>
                 <p className="line-clamp-2 break-words text-sm">{item.reply_snippet}</p>
                 <p className="line-clamp-1 break-words text-xs text-muted">On: {item.post_snippet}</p>
+                </div>
               </Link>
             </li>
           ))}

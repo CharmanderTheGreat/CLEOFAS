@@ -24,18 +24,25 @@ export const getViewer = cache(async (): Promise<Viewer | null> => {
   const supabase = await getSupabase();
   const { data } = await supabase
     .from("profiles")
-    .select("id, username, display_name, bio, created_at, private:profile_private(default_anonymous_replies, muted_words)")
+    .select("id, username, bio, avatar_path, created_at, private:profile_private(default_anonymous_replies, muted_words, username_changed_at, avatar_changed_at)")
     .eq("id", id)
     .maybeSingle();
   if (!data) return null;
 
-  const { private: priv, ...profile } = data as unknown as Omit<Viewer, "default_anonymous_replies" | "muted_words"> & {
-    private: { default_anonymous_replies: boolean; muted_words: string[] } | null;
+  const { private: priv, ...profile } = data as unknown as Omit<Viewer, "default_anonymous_replies" | "muted_words" | "username_changed_at" | "avatar_changed_at"> & {
+    private: {
+      default_anonymous_replies: boolean;
+      muted_words: string[];
+      username_changed_at: string | null;
+      avatar_changed_at: string | null;
+    } | null;
   };
   return {
     ...profile,
     default_anonymous_replies: priv?.default_anonymous_replies ?? false,
     muted_words: priv?.muted_words ?? [],
+    username_changed_at: priv?.username_changed_at ?? null,
+    avatar_changed_at: priv?.avatar_changed_at ?? null,
   };
 });
 

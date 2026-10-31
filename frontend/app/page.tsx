@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { PostComposer } from "@/components/PostComposer";
 import { PostList } from "@/components/PostList";
 import { requireOnboarded } from "@/lib/auth";
 import { fetchPosts } from "@/lib/posts";
@@ -19,8 +18,6 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
 
   return (
     <div className="space-y-4">
-      <PostComposer />
-
       <div className="flex gap-2">
         <Link href="/" className={tabClass(!followingOnly)}>Everyone</Link>
         <Link href="/?tab=following" className={tabClass(followingOnly)}>Following</Link>
@@ -34,7 +31,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         emptyMessage={
           followingOnly
             ? "Nothing from people you follow yet. Try finding people to follow."
-            : "No posts yet. Be the first to share."
+            : "No posts yet. Tap the pencil to share something."
         }
       />
     </div>

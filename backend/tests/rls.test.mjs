@@ -248,15 +248,16 @@ test("blocking hides NON-anonymous replies from the blocker (and the count match
   assert.equal(forB.length, 2);
 });
 
-test("complete_onboarding sets username, display name and bio", async () => {
+test("complete_onboarding sets username and bio", async () => {
   await reset();
-  await as(D, () => db.query("select public.complete_onboarding('quiet_owl', '  ', 'hello')"));
-  const [prof] = await q("select username, display_name, bio from public.profiles where id = $1", [D]);
+  await as(D, () => db.query("select public.complete_onboarding('quiet_owl', '  hello  ')"));
+  const [prof] = await q("select username, bio from public.profiles where id = $1", [D]);
   assert.equal(prof.username, "quiet_owl");
-  assert.equal(prof.display_name, null);
   assert.equal(prof.bio, "hello");
-  await as(null, () => expectDenied(() => db.query("select public.complete_onboarding('x_y_z', null, null)")));
+  await as(null, () => expectDenied(() => db.query("select public.complete_onboarding('x_y_z_w', null)")));
+  await db.exec(`update public.profile_private set username_changed_at = null where id = '${D}'`);
   await db.exec(`update public.profiles set username = 'user_d' where id = '${D}'`);
+  await db.exec(`update public.profile_private set username_changed_at = null where id = '${D}'`);
 });
 
 test("profile_private is private: default_anonymous_replies is not readable by others", async () => {
@@ -700,4 +701,215 @@ test("anonymous post reports keep the author for moderators", async () => {
   const [snap] = await q("select target_kind, target_author_id from public.reports");
   assert.equal(snap.target_kind, "post");
   assert.equal(snap.target_author_id, A);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Phase 3 (migration 0007)
+// ---------------------------------------------------------------------------------------------
+
+const setUsername = (id, name) =>
+  as(id, () => db.query("update public.profiles set username = $1 where id = $2", [name, id]));
+// Puts a username back to its original value (clears the cooldown stamp around the change).
+const restoreUsername = async (id, name) => {
+  await db.exec(`update public.profile_private set username_changed_at = null where id = '${id}'`);
+  await db.exec(`update public.profiles set username = '${name}' where id = '${id}'`);
+  await db.exec(`update public.profile_private set username_changed_at = null where id = '${id}'`);
+};
+const resetCooldowns = () =>
+  db.exec("update public.profile_private set username_changed_at = null, avatar_changed_at = null");
+
+test("usernames: 5-20 characters, letters/numbers/_ . -, start and end with a letter or number", async () => {
+  await reset();
+  await resetCooldowns();
+  for (const bad of ["abcd", "a".repeat(21), "_hello", "hello_", "he..llo", "he__llo", "he llo", "Hello1", "user_0a1b2c3d", "admin"]) {
+    await assert.rejects(() => setUsername(A, bad), undefined, `should reject ${bad}`);
+  }
+  await setUsername(A, "quiet.owl-2_x");
+  assert.equal((await q("select username from public.profiles where id = $1", [A]))[0].username, "quiet.owl-2_x");
+  await restoreUsername(A, "user_a");
+});
+
+test("username cooldown: 7 days between changes, first pick is free", async () => {
+  await reset();
+  await resetCooldowns();
+  // from a non-temporary name: first change allowed, the second one is blocked for 7 days
+  await setUsername(A, "first_name");
+  await assert.rejects(() => setUsername(A, "second_name"), /cooldown_username/);
+  await db.exec(`update public.profile_private set username_changed_at = now() - interval '8 days' where id = '${A}'`);
+  await setUsername(A, "second_name");
+  await restoreUsername(A, "user_a");
+});
+
+test("avatar: path must be inside your own folder, 7-day cooldown, removing counts as a change", async () => {
+  await reset();
+  await resetCooldowns();
+  const own = `${A}/abcdef123456.webp`;
+  await assert.rejects(
+    () => as(A, () => db.query("update public.profiles set avatar_path = $1 where id = $2", [`${B}/abcdef123456.webp`, A])),
+    /avatar_path_format|violates check/i,
+  );
+  await assert.rejects(
+    () => as(A, () => db.query("update public.profiles set avatar_path = $1 where id = $2", [`${A}/../x.webp`, A])),
+    /avatar_path_format|violates check/i,
+  );
+  await as(A, () => db.query("update public.profiles set avatar_path = $1 where id = $2", [own, A]));
+  await assert.rejects(
+    () => as(A, () => db.query("update public.profiles set avatar_path = null where id = $1", [A])),
+    /cooldown_avatar/,
+  );
+  await db.exec(`update public.profile_private set avatar_changed_at = now() - interval '8 days' where id = '${A}'`);
+  await as(A, () => db.query("update public.profiles set avatar_path = null where id = $1", [A]));
+});
+
+test("bio can always be edited, even during cooldowns", async () => {
+  await reset();
+  await resetCooldowns();
+  await setUsername(A, "some_name");
+  await as(A, () => db.query("update public.profiles set bio = 'hi there' where id = $1", [A]));
+  await restoreUsername(A, "user_a");
+});
+
+test("anonymous posts and replies never expose an avatar", async () => {
+  await reset();
+  await resetCooldowns();
+  const path = `${A}/abcdef123456.webp`;
+  await db.exec(`update public.profiles set avatar_path = '${path}' where id = '${A}'`);
+  const anon = await anonPost(A);
+  const named = await makePost(A, "public", "named");
+  await as(B, async () => {
+    const rows = await q("select id, author_avatar from public.list_posts()");
+    assert.equal(rows.find((r) => r.id === anon).author_avatar, null);
+    assert.equal(rows.find((r) => r.id === named).author_avatar, path);
+    const found = await q("select avatar_path from public.search_profiles('user_a')");
+    assert.equal(found[0].avatar_path, path);
+  });
+  await as(B, () =>
+    db.query("insert into public.replies (post_id, author_id, body, is_anonymous) values ($1, $2, 'x', true)", [named, B]),
+  );
+  const [reply] = await as(A, () => q("select avatar_path from public.get_replies($1)", [named]));
+  assert.equal(reply.avatar_path, null);
+  await resetCooldowns();
+  await db.exec(`update public.profiles set avatar_path = null where id = '${A}'`);
+  await resetCooldowns();
+});
+
+test("search accepts . and - in usernames", async () => {
+  await reset();
+  await resetCooldowns();
+  await setUsername(B, "mellow.fox-9");
+  const found = await as(A, () => q("select username from public.search_profiles('mellow.')"));
+  assert.deepEqual(found.map((r) => r.username), ["mellow.fox-9"]);
+  assert.equal((await as(A, () => q("select * from public.search_profiles('%')"))).length, 0);
+  await restoreUsername(B, "user_b");
+});
+
+test("vent mode: expired posts are hidden from everyone at once and purged later", async () => {
+  await reset();
+  const live = await q(
+    "insert into public.posts (author_id, body, created_at, expires_at) values ($1, 'live', now() - interval '1 hour', now() + interval '1 hour') returning id",
+    [A],
+  );
+  const dead = await q(
+    "insert into public.posts (author_id, body, created_at, expires_at) values ($1, 'dead', now() - interval '2 hours', now() - interval '1 minute') returning id",
+    [A],
+  );
+  for (const who of [A, B]) {
+    await as(who, async () => {
+      const ids = (await q("select id from public.list_posts()")).map((r) => r.id);
+      assert.ok(ids.includes(live[0].id));
+      assert.ok(!ids.includes(dead[0].id));
+      assert.equal((await q("select * from public.get_post($1)", [dead[0].id])).length, 0);
+      assert.equal((await q("select id from public.posts where id = $1", [dead[0].id])).length, 0);
+    });
+  }
+  // nobody can reply to or react on an expired post
+  await as(B, () =>
+    assert.rejects(() => db.query("insert into public.replies (post_id, author_id, body) values ($1, $2, 'late')", [dead[0].id, B])),
+  );
+  await as(B, () => assert.rejects(() => db.query("select public.set_reaction($1, 'hug')", [dead[0].id]), /not_allowed/));
+  // purge removes only the expired post; clients cannot call it
+  await as(B, () => expectDenied(() => db.query("select public.purge_expired_posts()")));
+  const [{ n }] = await q("select public.purge_expired_posts() n");
+  assert.equal(n, 1);
+  assert.equal((await q("select id from public.posts")).length, 1);
+});
+
+test("vent mode: expires_at must be in the future and at most 30 days out", async () => {
+  await reset();
+  await assert.rejects(() =>
+    db.query("insert into public.posts (author_id, body, expires_at) values ($1, 'x', now() - interval '1 hour')", [A]),
+  );
+  await assert.rejects(() =>
+    db.query("insert into public.posts (author_id, body, expires_at) values ($1, 'x', now() + interval '31 days')", [A]),
+  );
+  await as(A, () =>
+    db.query("insert into public.posts (author_id, body, expires_at) values ($1, 'ok', now() + interval '3 days')", [A]),
+  );
+  // cannot be changed after posting
+  const [p] = await q("select id from public.posts where body = 'ok'");
+  await as(A, () => expectDenied(() => db.query("update public.posts set expires_at = null where id = $1", [p.id])));
+});
+
+test("content warning: stored, length limited, not editable afterwards", async () => {
+  await reset();
+  await as(A, () =>
+    db.query("insert into public.posts (author_id, body, content_warning) values ($1, 'heavy', 'family stuff')", [A]),
+  );
+  const [row] = await as(B, () => q("select content_warning from public.list_posts()"));
+  assert.equal(row.content_warning, "family stuff");
+  await assert.rejects(() =>
+    db.query("insert into public.posts (author_id, body, content_warning) values ($1, 'x', $2)", [A, "w".repeat(81)]),
+  );
+  await assert.rejects(() => db.query("insert into public.posts (author_id, body, content_warning) values ($1, 'x', '')", [A]));
+});
+
+test("reactions: one per person, can change or remove, counts only, table closed", async () => {
+  await reset();
+  const post = await makePost(A, "public");
+  const state = async (who) => (await as(who, () => q("select reactions, my_reaction from public.get_post($1)", [post])))[0];
+
+  await as(B, () => db.query("select public.set_reaction($1, 'hug')", [post]));
+  await as(C, () => db.query("select public.set_reaction($1, 'hug')", [post]));
+  await as(A, () => db.query("select public.set_reaction($1, 'care')", [post]));
+  let s = await state(B);
+  assert.deepEqual(s.reactions, { hug: 2, care: 1 });
+  assert.equal(s.my_reaction, "hug");
+
+  await as(B, () => db.query("select public.set_reaction($1, 'relate')", [post])); // change
+  s = await state(B);
+  assert.deepEqual(s.reactions, { hug: 1, care: 1, relate: 1 });
+  assert.equal(s.my_reaction, "relate");
+
+  await as(B, () => db.query("select public.set_reaction($1, null)", [post])); // remove
+  s = await state(B);
+  assert.equal(s.my_reaction, null);
+  assert.deepEqual(s.reactions, { hug: 1, care: 1 });
+
+  await as(B, () => assert.rejects(() => db.query("select public.set_reaction($1, 'angry')", [post]), /invalid_reaction/));
+  await as(B, () => expectDenied(() => db.query("select * from public.reactions")));
+  await as(B, () => expectDenied(() => db.query("insert into public.reactions (post_id, user_id, kind) values ($1, $2, 'hug')", [post, B])));
+});
+
+test("reactions: need access to the post, and blocks never change the counts", async () => {
+  await reset();
+  const mutualsPost = await makePost(A, "mutuals");
+  await as(B, () => assert.rejects(() => db.query("select public.set_reaction($1, 'hug')", [mutualsPost]), /not_allowed/));
+
+  const post = await makePost(C, "public");
+  await as(B, () => db.query("select public.set_reaction($1, 'hug')", [post]));
+  const count = async () => (await as(A, () => q("select reactions from public.get_post($1)", [post])))[0].reactions;
+  assert.deepEqual(await count(), { hug: 1 });
+  await db.exec(`insert into public.blocks (blocker_id, blocked_id) values ('${A}', '${B}')`);
+  assert.deepEqual(await count(), { hug: 1 });
+  await db.exec("delete from public.blocks");
+});
+
+test("reactions on anonymous posts work and reveal nothing about the author", async () => {
+  await reset();
+  const id = await anonPost(A);
+  await as(B, () => db.query("select public.set_reaction($1, 'strength')", [id]));
+  const [row] = await as(B, () => q("select author_id, author_username, author_avatar, reactions from public.get_post($1)", [id]));
+  assert.equal(row.author_id, null);
+  assert.equal(row.author_username, null);
+  assert.deepEqual(row.reactions, { strength: 1 });
 });

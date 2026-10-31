@@ -3,6 +3,7 @@ import { deleteReply } from "@/app/actions";
 import { fullDate, timeAgo } from "@/lib/format";
 import type { ReplyRow } from "@/lib/types";
 import { ActionForm } from "./ActionForm";
+import { Avatar } from "./Avatar";
 import { EditReplyForm } from "./EditForms";
 import { ReportDialog } from "./ReportDialog";
 
@@ -16,12 +17,20 @@ export function ReplyList({ replies, postId }: { replies: ReplyRow[]; postId: st
       {replies.map((reply) => (
         <li key={reply.id} className="card space-y-2">
           <header className="flex flex-wrap items-center gap-x-2 text-sm">
-            {reply.is_anonymous ? (
-              <span className="font-semibold">Anonymous{reply.is_mine ? " (you)" : ""}</span>
+            {reply.is_anonymous || !reply.username ? (
+              <>
+                <Avatar anonymous size={28} />
+                <span className="font-semibold">Anonymous{reply.is_mine ? " (you)" : ""}</span>
+              </>
             ) : (
-              <Link href={`/u/${reply.username}`} className="font-semibold hover:text-accent">
-                {reply.display_name || `@${reply.username}`}
-              </Link>
+              <>
+                <Link href={`/u/${reply.username}`} aria-label={`@${reply.username}`}>
+                  <Avatar username={reply.username} path={reply.avatar_path} size={28} />
+                </Link>
+                <Link href={`/u/${reply.username}`} className="font-semibold hover:text-accent">
+                  @{reply.username}
+                </Link>
+              </>
             )}
             <span className="text-muted">·</span>
             <time dateTime={reply.created_at} title={fullDate(reply.created_at)} className="text-muted">

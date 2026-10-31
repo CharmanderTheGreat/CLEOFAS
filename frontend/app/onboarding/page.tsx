@@ -14,7 +14,7 @@ export default async function OnboardingPage() {
     <div className="mx-auto max-w-md space-y-4">
       <div>
         <h1 className="text-2xl font-bold">Pick a username</h1>
-        <p className="text-sm text-muted">This is how other people will see you. You can change it later in settings.</p>
+        <p className="text-sm text-muted">This is how other people will see you. You can change it later in settings (once every 7 days).</p>
       </div>
       <ProfileForm mode="onboarding" profile={profile} />
     </div>

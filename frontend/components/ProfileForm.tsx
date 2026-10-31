@@ -2,7 +2,8 @@
 
 import { useActionState } from "react";
 import { completeOnboarding, updateSettings } from "@/app/actions";
-import { MAX_BIO_LENGTH, MAX_DISPLAY_NAME_LENGTH, TEMP_USERNAME_REGEX } from "@/lib/constants";
+import { cooldownEnds, formatCooldown } from "@/lib/avatar";
+import { COOLDOWN_DAYS, MAX_BIO_LENGTH, TEMP_USERNAME_REGEX, USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH } from "@/lib/constants";
 import type { Viewer } from "@/lib/types";
 
 // One form for both first-time setup (onboarding) and the settings page.
@@ -10,39 +11,43 @@ export function ProfileForm({ mode, profile }: { mode: "onboarding" | "settings"
   const [state, action, pending] = useActionState(mode === "onboarding" ? completeOnboarding : updateSettings, undefined);
   const isOnboarding = mode === "onboarding";
 
+  // The username can be changed once every 7 days (the first pick is free).
+  const lockedUntil = isOnboarding ? null : cooldownEnds(profile.username_changed_at);
+
   return (
     <form action={action} className="card space-y-4">
       <div className="space-y-1">
-        <label htmlFor="username" className="text-sm font-medium">Username</label>
+        <label htmlFor="username" className="text-sm font-medium">
+          Username
+        </label>
         <input
           id="username"
           name="username"
           defaultValue={TEMP_USERNAME_REGEX.test(profile.username) ? "" : profile.username}
           required
-          minLength={3}
-          maxLength={20}
-          pattern="[a-z0-9_]{3,20}"
+          minLength={USERNAME_MIN_LENGTH}
+          maxLength={USERNAME_MAX_LENGTH}
+          readOnly={lockedUntil !== null}
           autoComplete="off"
           autoCapitalize="none"
-          placeholder="e.g. quiet_owl"
-          className="input"
+          spellCheck={false}
+          placeholder="e.g. quiet.owl"
+          className={`input ${lockedUntil ? "cursor-not-allowed opacity-60" : ""}`}
         />
-        <p className="text-xs text-muted">3-20 characters: lowercase letters, numbers and underscore.</p>
+        {lockedUntil ? (
+          <p className="text-xs text-muted">You can change your username again on {formatCooldown(lockedUntil)}.</p>
+        ) : (
+          <p className="text-xs text-muted">
+            {USERNAME_MIN_LENGTH}-{USERNAME_MAX_LENGTH} characters: letters, numbers and _ . - (start and end with a letter or
+            number). {isOnboarding ? "" : `You can change it once every ${COOLDOWN_DAYS} days.`}
+          </p>
+        )}
       </div>
 
       <div className="space-y-1">
-        <label htmlFor="displayName" className="text-sm font-medium">Display name (optional)</label>
-        <input
-          id="displayName"
-          name="displayName"
-          defaultValue={profile.display_name ?? ""}
-          maxLength={MAX_DISPLAY_NAME_LENGTH}
-          className="input"
-        />
-      </div>
-
-      <div className="space-y-1">
-        <label htmlFor="bio" className="text-sm font-medium">Bio (optional)</label>
+        <label htmlFor="bio" className="text-sm font-medium">
+          Bio (optional)
+        </label>
         <textarea id="bio" name="bio" defaultValue={profile.bio ?? ""} rows={3} maxLength={MAX_BIO_LENGTH} className="input resize-none" />
       </div>
 
@@ -55,7 +60,6 @@ export function ProfileForm({ mode, profile }: { mode: "onboarding" | "settings"
           </span>
         </label>
       )}
-
 
       <button type="submit" className="btn-primary" disabled={pending}>
         {pending ? "Saving…" : isOnboarding ? "Continue" : "Save changes"}

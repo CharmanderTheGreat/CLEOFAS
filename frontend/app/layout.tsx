@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
-import { signOut } from "./actions";
+import { LifeBuoy, Settings } from "lucide-react";
+import { ComposeDialog } from "@/components/ComposeDialog";
 import { LiveRefresh } from "@/components/LiveRefresh";
+import { BottomNav, TopNav } from "@/components/NavBars";
 import { RegisterServiceWorker } from "@/components/RegisterServiceWorker";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { getUnreadCount, getViewer, isOnboarded } from "@/lib/auth";
@@ -20,10 +22,14 @@ export const viewport: Viewport = {
   ],
   width: "device-width",
   initialScale: 1,
+  viewportFit: "cover",
 };
 
 // Runs before first paint so the page never flashes the wrong theme.
 const themeScript = `(function(){try{var t=localStorage.getItem('theme');var d=t?t==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;var r=document.documentElement;r.classList.toggle('dark',d);r.style.colorScheme=d?'dark':'light';}catch(e){}})();`;
+
+const iconButton =
+  "inline-flex h-9 w-9 items-center justify-center rounded-full text-muted transition-colors hover:bg-accent-soft hover:text-accent";
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // Shared with the page through React cache(): no extra auth or profile query.
@@ -37,52 +43,44 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
       <body className="min-h-screen antialiased">
-        <header className="sticky top-0 z-10 border-b border-line bg-paper/90 backdrop-blur">
-          <nav className="mx-auto flex max-w-2xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 text-sm">
+        <header className="sticky top-0 z-10 border-b border-line bg-paper/90 backdrop-blur" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
+          <div className="mx-auto flex max-w-2xl items-center gap-2 px-4 py-2">
             <Link href="/" className="text-lg font-bold tracking-tight text-accent">
               Cleofas
             </Link>
+
             {showNav && viewer && (
-              <>
-                <Link href="/" className="link-quiet">Home</Link>
-                <Link href="/search" className="link-quiet">Find people</Link>
-                <Link href="/notifications" className="link-quiet inline-flex items-center gap-1">
-                  Notifications
-                  {unread > 0 && (
-                    <span
-                      aria-label={`${unread} unread`}
-                      className="rounded-full bg-accent px-1.5 text-xs font-semibold leading-5 text-on-accent"
-                    >
-                      {unread > 99 ? "99+" : unread}
-                    </span>
-                  )}
-                </Link>
-                <Link href={`/u/${viewer.username}`} className="link-quiet">Profile</Link>
-                <Link href="/settings" className="link-quiet">Settings</Link>
-              </>
+              <div className="ml-3">
+                <TopNav username={viewer.username} avatarPath={viewer.avatar_path} unread={unread} />
+              </div>
             )}
-            <div className="ml-auto flex items-center gap-3">
-              <ThemeToggle />
-              {viewer && (
-                <form action={signOut}>
-                  <button type="submit" className="link-quiet">Sign out</button>
-                </form>
+
+            <div className="ml-auto flex items-center gap-1">
+              {/* Always visible at the top: it used to sit at the very bottom of an endless feed. */}
+              <Link href="/help" aria-label="Feeling overwhelmed? Crisis resources" title="Feeling overwhelmed? Crisis resources" className={iconButton}>
+                <LifeBuoy size={20} aria-hidden />
+              </Link>
+              {showNav && (
+                <Link href="/settings" aria-label="Settings" title="Settings" className={iconButton}>
+                  <Settings size={20} aria-hidden />
+                </Link>
               )}
+              <ThemeToggle />
             </div>
-          </nav>
+          </div>
         </header>
 
-        {showNav && viewer && <LiveRefresh topic={`user:${viewer.id}`} event="notify" />}
+        {showNav && viewer && (
+          <>
+            <LiveRefresh topic={`user:${viewer.id}`} event="notify" />
+            <ComposeDialog />
+          </>
+        )}
         <RegisterServiceWorker />
 
-        <main className="mx-auto max-w-2xl px-4 py-6">{children}</main>
+        <main className={`mx-auto max-w-2xl px-4 py-6 ${showNav ? "pb-28 md:pb-10" : ""}`}>{children}</main>
 
-        <footer className="mx-auto max-w-2xl px-4 pb-10 pt-4 text-center text-xs text-muted">
-          Feeling overwhelmed?{" "}
-          <Link href="/help" className="text-accent underline">
-            Crisis resources
-          </Link>
-        </footer>
+        {showNav && viewer && <BottomNav username={viewer.username} avatarPath={viewer.avatar_path} unread={unread} />}
       </body>
     </html>
   );

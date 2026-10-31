@@ -1,7 +1,6 @@
 export const MAX_POST_LENGTH = 1000;
 export const MAX_REPLY_LENGTH = 500;
 export const MAX_BIO_LENGTH = 160;
-export const MAX_DISPLAY_NAME_LENGTH = 50;
 export const MAX_REPORT_REASON_LENGTH = 500;
 export const FEED_PAGE_SIZE = 20;
 export const MAX_MUTED_WORDS = 30;
@@ -12,7 +11,38 @@ export const MUTED_WORD_REGEX = /^[\p{L}\p{N}][\p{L}\p{N} '_-]*$/u;
 // Minimum age shown as a notice on the login page (README.md section 11). Not verified or stored.
 export const MIN_AGE = 13;
 
-export const USERNAME_REGEX = /^[a-z0-9_]{3,20}$/;
+// New usernames: 5-20 characters, letters (stored lowercase), numbers and _ . -
+// They must start and end with a letter or number, and never have two symbols in a row.
+// Kept in sync with profiles_guard() in supabase/migrations/0007_phase3.sql.
+export const USERNAME_MIN_LENGTH = 5;
+export const USERNAME_MAX_LENGTH = 20;
+export const USERNAME_REGEX = /^[a-z0-9][a-z0-9_.-]{3,18}[a-z0-9]$/;
+export function isValidUsername(username: string): boolean {
+  return USERNAME_REGEX.test(username) && !/[._-]{2}/.test(username);
+}
+// Looser check for URLs only, so profiles with an older, shorter username still open.
+export const USERNAME_LOOKUP_REGEX = /^[a-z0-9][a-z0-9_.-]{1,30}$/;
+
+// Username and profile picture can each be changed once every 7 days.
+export const COOLDOWN_DAYS = 7;
+export const AVATAR_MAX_BYTES = 300 * 1024;
+export const AVATAR_SIZE = 256;
+
+export const MAX_CONTENT_WARNING_LENGTH = 80;
+// Vent mode: the post disappears after this many days.
+export const VENT_OPTIONS = [
+  { days: 1, label: "1 day" },
+  { days: 3, label: "3 days" },
+  { days: 7, label: "7 days" },
+] as const;
+
+export const REACTIONS = [
+  { kind: "hug", emoji: "🤗", label: "Hug" },
+  { kind: "relate", emoji: "🤝", label: "Relate" },
+  { kind: "strength", emoji: "💪", label: "Stay strong" },
+  { kind: "care", emoji: "💚", label: "Care" },
+] as const;
+export type ReactionKind = (typeof REACTIONS)[number]["kind"];
 export const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // Kept in sync with profiles_username_reserved in supabase/migrations/0004_hardening.sql.
 export const RESERVED_USERNAMES = [

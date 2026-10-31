@@ -1,10 +1,10 @@
-import type { Visibility } from "./constants";
+import type { ReactionKind, Visibility } from "./constants";
 
 export type Profile = {
   id: string;
   username: string;
-  display_name: string | null;
   bio: string | null;
+  avatar_path: string | null;
   created_at: string;
 };
 
@@ -12,6 +12,8 @@ export type Profile = {
 export type Viewer = Profile & {
   default_anonymous_replies: boolean;
   muted_words: string[];
+  username_changed_at: string | null;
+  avatar_changed_at: string | null;
 };
 
 // author / author_id are null for anonymous posts (the database blanks them for everyone, even you).
@@ -22,10 +24,17 @@ export type PostRow = {
   visibility: Visibility;
   is_anonymous: boolean;
   is_mine: boolean;
+  // Optional warning label: the text stays hidden until the reader opens it.
+  content_warning: string | null;
+  // Vent mode: when the post disappears (null = never).
+  expires_at: string | null;
   created_at: string;
   updated_at: string;
-  author: { username: string; display_name: string | null } | null;
+  author: { username: string; avatar_path: string | null } | null;
   reply_count?: number;
+  // How many people used each reaction, and the viewer's own reaction. No names, ever.
+  reactions: Partial<Record<ReactionKind, number>>;
+  my_reaction: ReactionKind | null;
 };
 
 // Shape returned by get_notifications(). actor_username is null for anonymous replies.
@@ -37,6 +46,7 @@ export type NotificationRow = {
   is_read: boolean;
   is_anonymous: boolean;
   actor_username: string | null;
+  actor_avatar: string | null;
   reply_snippet: string;
   post_snippet: string;
 };
@@ -57,7 +67,7 @@ export type AdminReportRow = {
 };
 
 // Shape returned by the get_replies() database function.
-// author_id / username / display_name are null for anonymous replies.
+// author_id / username / avatar_path are null for anonymous replies.
 export type ReplyRow = {
   id: string;
   post_id: string;
@@ -66,7 +76,7 @@ export type ReplyRow = {
   created_at: string;
   author_id: string | null;
   username: string | null;
-  display_name: string | null;
+  avatar_path: string | null;
   is_mine: boolean;
   can_delete: boolean;
 };

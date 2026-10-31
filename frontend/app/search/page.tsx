@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Avatar } from "@/components/Avatar";
 import { requireOnboarded } from "@/lib/auth";
 
 export const metadata: Metadata = { title: "Find people" };
@@ -8,11 +9,11 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   const { q = "" } = await searchParams;
   const { supabase } = await requireOnboarded();
 
-  // Usernames only contain [a-z0-9_]; stripping everything else also neutralises LIKE wildcards.
-  const term = q.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 20);
+  // Usernames only contain [a-z0-9_.-]; stripping everything else also neutralises LIKE wildcards.
+  const term = q.toLowerCase().replace(/[^a-z0-9_.-]/g, "").slice(0, 20);
 
   // One query: prefix match, without yourself and without anyone blocked in either direction.
-  let people: { id: string; username: string; display_name: string | null }[] = [];
+  let people: { id: string; username: string; avatar_path: string | null }[] = [];
   if (term.length >= 2) {
     const { data, error } = await supabase.rpc("search_profiles", { p_term: term });
     if (error) throw new Error("Search failed.");
@@ -38,9 +39,9 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
       <ul className="space-y-2">
         {people.map((person) => (
           <li key={person.id}>
-            <Link href={`/u/${person.username}`} className="card block hover:border-accent">
-              <span className="font-medium">{person.display_name || `@${person.username}`}</span>
-              {person.display_name && <span className="ml-2 text-sm text-muted">@{person.username}</span>}
+            <Link href={`/u/${person.username}`} className="card flex items-center gap-3 hover:border-accent">
+              <Avatar username={person.username} path={person.avatar_path} size={36} />
+              <span className="font-medium">@{person.username}</span>
             </Link>
           </li>
         ))}

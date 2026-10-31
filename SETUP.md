@@ -18,7 +18,14 @@ Stack: Next.js 16 (App Router) + TypeScript + Tailwind CSS 4 + Supabase (Postgre
 
 Phase 2 (built): anonymous posts, reply notifications, live updates (Realtime), muted words, admin moderation page, infinite scroll, installable PWA, green theme with animated dark/light switch.
 
-Not built yet (Phase 3): vent mode, reactions, content warning toggle, email notifications.
+Phase 3 (built): vent mode, reactions, content warnings, profile pictures (letter fallback), usernames 5-20 characters (no display name), 7-day cooldown for username and picture, icon tab bar, write pop-up.
+
+Not built yet: email notifications (needs an email service), native wrapper (the PWA covers it).
+
+## Phase 3 notes
+- **Auto-delete for vent posts:** turn on `pg_cron` (Dashboard > Database > Extensions) before running 0007. If you did it later, run `select cron.schedule('cleofas-purge-expired', '*/15 * * * *', 'select public.purge_expired_posts()');` once. Without it, expired posts are still hidden, they are just not deleted from the table.
+- **Profile pictures:** 0007 creates the public `avatars` bucket (max 300 KB, JPG/PNG/WebP) and the policies. The app shrinks pictures to 256 px before uploading. Pictures can be opened by anyone who has the link, but the link is random and only shown inside the app.
+- **Existing users:** keep their current username (even if shorter than 5). New names must follow the new rules. Display names are gone.
 
 ## Phase 2 notes
 - **Become a moderator:** sign in once, then in the Supabase SQL Editor run
@@ -39,6 +46,7 @@ Not built yet (Phase 3): vent mode, reactions, content warning toggle, email not
    4. `backend/supabase/migrations/0004_hardening.sql`
    5. `backend/supabase/migrations/0005_remove_age_gate.sql`
    6. `backend/supabase/migrations/0006_phase2.sql`
+   7. `backend/supabase/migrations/0007_phase3.sql`
 
    Already ran some of them? Run only the missing ones, in order.
 
@@ -78,7 +86,7 @@ In `backend/` (run `npm install` once first):
 
 | Command | What it does |
 |---|---|
-| `npm test` | Runs the README.md section 10 checklist (plus extra cases, 45 tests) against the migrations in an in-memory Postgres. No Supabase account needed. |
+| `npm test` | Runs the README.md section 10 checklist (plus extra cases, 57 tests) against the migrations in an in-memory Postgres. No Supabase account needed. |
 
 ## How privacy is enforced
 

@@ -4,7 +4,8 @@ import { BlockButton } from "@/components/BlockButton";
 import { FollowButton } from "@/components/FollowButton";
 import { PostList } from "@/components/PostList";
 import { requireOnboarded } from "@/lib/auth";
-import { USERNAME_REGEX } from "@/lib/constants";
+import { Avatar } from "@/components/Avatar";
+import { USERNAME_LOOKUP_REGEX } from "@/lib/constants";
 import { fetchPosts } from "@/lib/posts";
 import type { Profile } from "@/lib/types";
 
@@ -19,13 +20,13 @@ export default async function ProfilePage({
   params: Promise<{ username: string }>;
 }) {
   const { username } = await params;
-  if (!USERNAME_REGEX.test(username)) notFound();
+  if (!USERNAME_LOOKUP_REGEX.test(username)) notFound();
 
   const { supabase, user } = await requireOnboarded();
 
   const { data: found } = await supabase
     .from("profiles")
-    .select("id, username, display_name, bio, created_at")
+    .select("id, username, bio, avatar_path, created_at")
     .eq("username", username)
     .maybeSingle();
   if (!found) notFound();
@@ -55,9 +56,9 @@ export default async function ProfilePage({
     <div className="space-y-6">
       <section className="card space-y-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-bold">{profile.display_name || `@${profile.username}`}</h1>
-            {profile.display_name && <p className="text-sm text-muted">@{profile.username}</p>}
+          <div className="flex items-center gap-3">
+            <Avatar username={profile.username} path={profile.avatar_path} size={64} />
+            <h1 className="break-all text-xl font-bold">@{profile.username}</h1>
           </div>
           <div className="flex items-center gap-2">
             {isMe ? (

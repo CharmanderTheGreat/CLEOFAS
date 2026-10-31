@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { BlockButton } from "@/components/BlockButton";
 import { DeleteAccountForm } from "@/components/DeleteAccountForm";
+import { signOut } from "@/app/actions";
+import { AvatarUploader } from "@/components/AvatarUploader";
 import { MutedWordsForm } from "@/components/MutedWordsForm";
 import { ProfileForm } from "@/components/ProfileForm";
 import { getIsAdmin, requireOnboarded } from "@/lib/auth";
@@ -30,6 +32,7 @@ export default async function SettingsPage() {
     <div className="space-y-8">
       <section className="space-y-3">
         <h1 className="text-xl font-bold">Settings</h1>
+        <AvatarUploader username={profile.username} avatarPath={profile.avatar_path} changedAt={profile.avatar_changed_at} />
         <ProfileForm mode="settings" profile={profile} />
       </section>
 
@@ -62,6 +65,15 @@ export default async function SettingsPage() {
           </Link>
         </section>
       )}
+
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">Account</h2>
+        <form action={signOut}>
+          <button type="submit" className="btn-ghost">
+            Sign out
+          </button>
+        </form>
+      </section>
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Danger zone</h2>

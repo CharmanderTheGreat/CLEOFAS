@@ -1,15 +1,16 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireOnboarded } from "@/lib/auth";
-import { USERNAME_REGEX } from "@/lib/constants";
+import { Avatar } from "@/components/Avatar";
+import { USERNAME_LOOKUP_REGEX } from "@/lib/constants";
 
 export const metadata = { title: "People" };
 
-type Person = { username: string; display_name: string | null };
+type Person = { username: string; avatar_path: string | null };
 
 export default async function FollowListPage({ params }: { params: Promise<{ username: string; tab: string }> }) {
   const { username, tab } = await params;
-  if (!USERNAME_REGEX.test(username) || (tab !== "followers" && tab !== "following")) notFound();
+  if (!USERNAME_LOOKUP_REGEX.test(username) || (tab !== "followers" && tab !== "following")) notFound();
 
   const { supabase, user } = await requireOnboarded();
 
@@ -27,8 +28,8 @@ export default async function FollowListPage({ params }: { params: Promise<{ use
     .from("follows")
     .select(
       isFollowers
-        ? "person:profiles!follows_follower_id_fkey(username, display_name)"
-        : "person:profiles!follows_following_id_fkey(username, display_name)",
+        ? "person:profiles!follows_follower_id_fkey(username, avatar_path)"
+        : "person:profiles!follows_following_id_fkey(username, avatar_path)",
     )
     .eq(isFollowers ? "following_id" : "follower_id", profile.id)
     .order("created_at", { ascending: false })
@@ -51,9 +52,9 @@ export default async function FollowListPage({ params }: { params: Promise<{ use
         <ul className="space-y-2">
           {people.map((person) => (
             <li key={person.username}>
-              <Link href={`/u/${person.username}`} className="card block hover:border-accent">
-                <span className="font-medium">{person.display_name || `@${person.username}`}</span>
-                {person.display_name && <span className="ml-2 text-sm text-muted">@{person.username}</span>}
+              <Link href={`/u/${person.username}`} className="card flex items-center gap-3 hover:border-accent">
+                <Avatar username={person.username} path={person.avatar_path} size={36} />
+                <span className="font-medium">@{person.username}</span>
               </Link>
             </li>
           ))}
